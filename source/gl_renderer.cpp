@@ -105,29 +105,33 @@ float rSmooth(float e0, float e1, float x) {
 
 void main() {
 	// No magnification: plain nearest sampling (same look as the plain FBO blit)
-	if (uCellSize < 1.0) {
+	if (uCellSize <= 1.0f) {
 		FragColor = texture(uTexture, vUV) * vColor;
 		return;
 	}
 
 	ivec2 lim = ivec2(uTexSize) - 1;
-	vec2 p = gl_FragCoord.xy / uCellSize;
+	int cs = max(1, int(uCellSize + 0.5f));
+	vec2 p = gl_FragCoord.xy / float(cs);
 	ivec2 c = ivec2(int(floor(p.x)), int(floor(p.y)));
 	vec2 f = p - vec2(c);
+	// The scene is already zoomed inside the FBO (1 map unit = uCellSize texels),
+	// so each cell's base TEXEL is c * uCellSize, not the cell index itself.
+	ivec2 base = c * cs;
 
-	vec4 s00 = texelFetch(uTexture, clamp(c, ivec2(0, 0), lim), 0);
-	vec4 s10 = texelFetch(uTexture, clamp(c + ivec2(1, 0), ivec2(0, 0), lim), 0);
-	vec4 s01 = texelFetch(uTexture, clamp(c + ivec2(0, 1), ivec2(0, 0), lim), 0);
-	vec4 s11 = texelFetch(uTexture, clamp(c + ivec2(1, 1), ivec2(0, 0), lim), 0);
+	vec4 s00 = texelFetch(uTexture, clamp(base, ivec2(0, 0), lim), 0);
+	vec4 s10 = texelFetch(uTexture, clamp(base + ivec2(cs, 0), ivec2(0, 0), lim), 0);
+	vec4 s01 = texelFetch(uTexture, clamp(base + ivec2(0, cs), ivec2(0, 0), lim), 0);
+	vec4 s11 = texelFetch(uTexture, clamp(base + ivec2(cs, cs), ivec2(0, 0), lim), 0);
 	s00.rgb *= s00.a;
 	s10.rgb *= s10.a;
 	s01.rgb *= s01.a;
 	s11.rgb *= s11.a;
 
-	vec4 cL = texelFetch(uTexture, clamp(c + ivec2(-1, 0), ivec2(0, 0), lim), 0);
-	vec4 cR = texelFetch(uTexture, clamp(c + ivec2( 1, 0), ivec2(0, 0), lim), 0);
-	vec4 cU = texelFetch(uTexture, clamp(c + ivec2( 0, -1), ivec2(0, 0), lim), 0);
-	vec4 cD = texelFetch(uTexture, clamp(c + ivec2( 0, 1), ivec2(0, 0), lim), 0);
+	vec4 cL = texelFetch(uTexture, clamp(base + ivec2(-cs, 0), ivec2(0, 0), lim), 0);
+	vec4 cR = texelFetch(uTexture, clamp(base + ivec2( cs, 0), ivec2(0, 0), lim), 0);
+	vec4 cU = texelFetch(uTexture, clamp(base + ivec2(0, -cs), ivec2(0, 0), lim), 0);
+	vec4 cD = texelFetch(uTexture, clamp(base + ivec2(0, cs), ivec2(0, 0), lim), 0);
 	cL.rgb *= cL.a;
 	cR.rgb *= cR.a;
 	cU.rgb *= cU.a;

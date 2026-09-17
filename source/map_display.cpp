@@ -17,6 +17,7 @@
 
 #include "main.h"
 #include <array>
+#include <cmath>
 
 #include "gui.h"
 #include "editor.h"
@@ -1650,18 +1651,27 @@ void MapCanvas::OnWheel(wxMouseEvent &event) {
 			diff = 0.0;
 		}
 	} else {
-		double diff = -event.GetWheelRotation() * g_settings.getFloat(Config::ZOOM_SPEED) / 640.0;
+		double steps = -event.GetWheelRotation() / 120.0;
+		double stepScale = g_settings.getFloat(Config::ZOOM_SPEED);
+		// Multiplicative stepping: each notch changes zoom by a fixed ratio, so
+		// the perceived zoom percentage moves uniformly across the whole range.
+		double factor = std::exp(steps * 0.08 * stepScale);
+		// Soften the magnified zone (zoom < 1, i.e. >100%): crossing 100% becomes
+		// gradual and extreme zoom-in values require many notches to reach.
+		if (zoom * factor < 1.0) {
+			factor = 1.0 + (factor - 1.0) * 0.35;
+		}
+
 		double oldzoom = zoom;
-		zoom += diff;
+		zoom *= factor;
 
 		if (zoom < 0.125) {
-			diff = 0.125 - oldzoom;
 			zoom = 0.125;
 		}
 		if (zoom > 25.00) {
-			diff = 25.00 - oldzoom;
 			zoom = 25.0;
 		}
+		double diff = zoom - oldzoom;
 
 		UpdateZoomStatus();
 
@@ -1669,9 +1679,9 @@ void MapCanvas::OnWheel(wxMouseEvent &event) {
 		MapWindow* window = GetMapWindow();
 		window->GetViewSize(&screensize_x, &screensize_y);
 
-		// This took a day to figure out!
-		int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x))) * GetContentScaleFactor();
-		int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y))) * GetContentScaleFactor();
+		// Zoom always anchored to the viewport center (not the cursor)
+		int scroll_x = int(screensize_x * diff * 0.5);
+		int scroll_y = int(screensize_y * diff * 0.5);
 
 		window->ScrollRelative(-scroll_x, -scroll_y);
 	}
@@ -1718,22 +1728,26 @@ void MapCanvas::OnKeyDown(wxKeyEvent &event) {
 			break;
 		}
 		case WXK_NUMPAD_MULTIPLY: {
-			double diff = -0.3;
+			double factor = std::exp(-0.3);
+
+			if (zoom * factor < 1.0) {
+				factor = 1.0 + (factor - 1.0) * 0.35;
+			}
 
 			double oldzoom = zoom;
-			zoom += diff;
+			zoom *= factor;
 
 			if (zoom < 0.125) {
-				diff = 0.125 - oldzoom;
 				zoom = 0.125;
 			}
+			double diff = zoom - oldzoom;
 
 			int screensize_x, screensize_y;
 			window->GetViewSize(&screensize_x, &screensize_y);
 
 			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x)));
-			int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y)));
+			int scroll_x = int(screensize_x * diff * 0.5);
+			int scroll_y = int(screensize_y * diff * 0.5);
 
 			window->ScrollRelative(-scroll_x, -scroll_y);
 
@@ -1743,21 +1757,26 @@ void MapCanvas::OnKeyDown(wxKeyEvent &event) {
 			break;
 		}
 		case WXK_NUMPAD_DIVIDE: {
-			double diff = 0.3;
+			double factor = std::exp(0.3);
+
+			if (zoom * factor < 1.0) {
+				factor = 1.0 + (factor - 1.0) * 0.35;
+			}
+
 			double oldzoom = zoom;
-			zoom += diff;
+			zoom *= factor;
 
 			if (zoom > 25.00) {
-				diff = 25.00 - oldzoom;
 				zoom = 25.0;
 			}
+			double diff = zoom - oldzoom;
 
 			int screensize_x, screensize_y;
 			window->GetViewSize(&screensize_x, &screensize_y);
 
 			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * (std::max(cursor_x, 1) / double(screensize_x)));
-			int scroll_y = int(screensize_y * diff * (std::max(cursor_y, 1) / double(screensize_y)));
+			int scroll_x = int(screensize_x * diff * 0.5);
+			int scroll_y = int(screensize_y * diff * 0.5);
 			window->ScrollRelative(-scroll_x, -scroll_y);
 
 			UpdatePositionStatus();

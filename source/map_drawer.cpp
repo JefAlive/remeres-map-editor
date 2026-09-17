@@ -290,7 +290,7 @@ void MapDrawer::Draw() {
 		// the Smooth Retro pass has magnification to work with; when zoomed out
 		// the cell scale stays below 1 and it falls back to nearest sampling.
 		float cellScale = 1.0f / zoom;
-		renderer->blitFBO(w, h, 0.0f); // DEBUG A/B: retro map pass disabled
+		renderer->blitFBO(w, h, cellScale);
 	}
 
 	DrawDraggingShadow();
