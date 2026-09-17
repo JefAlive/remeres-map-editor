@@ -104,6 +104,10 @@ float rSmooth(float e0, float e1, float x) {
 	return t * t * (3.0 - 2.0 * t);
 }
 
+vec4 rTex(ivec2 lim, ivec2 p) {
+	return texelFetch(uTexture, clamp(p, ivec2(0), lim), 0);
+}
+
 void main() {
 	// No magnification: plain nearest sampling (same look as the plain FBO blit)
 	if (uCellSize <= 1.0f) {
@@ -120,44 +124,70 @@ void main() {
 	// so each cell's base TEXEL is c * uCellSize, not the cell index itself.
 	ivec2 base = c * cs;
 
-	vec4 s00 = texelFetch(uTexture, clamp(base, ivec2(0, 0), lim), 0);
-	vec4 s10 = texelFetch(uTexture, clamp(base + ivec2(cs, 0), ivec2(0, 0), lim), 0);
-	vec4 s01 = texelFetch(uTexture, clamp(base + ivec2(0, cs), ivec2(0, 0), lim), 0);
-	vec4 s11 = texelFetch(uTexture, clamp(base + ivec2(cs, cs), ivec2(0, 0), lim), 0);
-	s00.rgb *= s00.a;
-	s10.rgb *= s10.a;
-	s01.rgb *= s01.a;
-	s11.rgb *= s11.a;
+	// Centre + 4 cardinals only: the diagonals are never fetched, so a corner
+	// can't smear colour across itself (the old 2x2 bilinear pulled in the
+	// diagonal neighbour and rounded every corner).
+	vec4 s00 = rTex(lim, base);
+	vec4 s10 = rTex(lim, base + ivec2(cs, 0));
+	vec4 s01 = rTex(lim, base + ivec2(0, cs));
+	vec4 sL  = rTex(lim, base + ivec2(-cs, 0));
+	vec4 sU  = rTex(lim, base + ivec2(0, -cs));
 
-	vec4 cL = texelFetch(uTexture, clamp(base + ivec2(-cs, 0), ivec2(0, 0), lim), 0);
-	vec4 cR = texelFetch(uTexture, clamp(base + ivec2( cs, 0), ivec2(0, 0), lim), 0);
-	vec4 cU = texelFetch(uTexture, clamp(base + ivec2(0, -cs), ivec2(0, 0), lim), 0);
-	vec4 cD = texelFetch(uTexture, clamp(base + ivec2(0, cs), ivec2(0, 0), lim), 0);
-	cL.rgb *= cL.a;
-	cR.rgb *= cR.a;
-	cU.rgb *= cU.a;
-	cD.rgb *= cD.a;
+	// Premultiplied copies: a transparent neighbour contributes no colour, so
+	// the blend can never pull black (dark fringes) across alpha borders.
+	vec4 p00 = vec4(s00.rgb * s00.a, s00.a);
+	vec4 pR  = vec4(s10.rgb * s10.a, s10.a);
+	vec4 pD  = vec4(s01.rgb * s01.a, s01.a);
+	vec4 pL  = vec4(sL.rgb * sL.a, sL.a);
+	vec4 pU  = vec4(sU.rgb * sU.a, sU.a);
+
+	// Keep semi-transparent cells crisp: soft blending is applied only on the
+	// opaque side of an edge, transparencies keep hard pixel boundaries.
+	if (s00.a < 0.5f) {
+		FragColor = s00 * vColor;
+		return;
+	}
+
+	// Edge direction on premultiplied luma, so transparent neighbours no longer
+	// fake strong black edges for the detector.
+	float gX = abs(rLum(pL.rgb) - rLum(pR.rgb));
+	float gY = abs(rLum(pU.rgb) - rLum(pD.rgb));
+	float gMax = max(gX, gY);
 
 	// Edge-gated blend: only soften borders where pixels actually differ
-	float l00 = rLum(s00.rgb);
-	float maxDiff = max(max(abs(l00 - rLum(cL.rgb)), abs(l00 - rLum(cR.rgb))),
-	                    max(abs(l00 - rLum(cU.rgb)), abs(l00 - rLum(cD.rgb))));
+	float maxDiff = max(max(abs(rLum(pL.rgb) - rLum(p00.rgb)), abs(rLum(pR.rgb) - rLum(p00.rgb))),
+	                    max(abs(rLum(pU.rgb) - rLum(p00.rgb)), abs(rLum(pD.rgb) - rLum(p00.rgb))));
 	float edgeGain = rSmooth(0.02, 0.12, maxDiff);
+
+	// Blend only along the dominant edge axis: a vertical edge pulls colour
+	// from left/right, a horizontal one from up/down.
+	bool useX = gX >= gY;
+	float t = useX ? f.x : f.y;
+	vec4 other = useX ? pR : pD;
+	// When the change is spread over both axes (corner/diagonal) the one-axis
+	// blend would cut a diagonal, so snap back toward the crisp core.
+	float corner = rSmooth(1.25, 2.5, min(gX, gY) / max(gMax, 1e-5));
 
 	// Blend only in the outer fringe of each cell so the apparent border stays
 	// glued to the pick grid (perceived edge = real grid line)
 	float interior = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
 	float border = 1.0 - rSmooth(0.30, 0.50, clamp(interior, 0.0, 0.5));
 
-	float mixAmt = 0.6f * edgeGain * border;
+	float mixAmt = 0.65f * edgeGain * border * (1.0 - corner);
 
-	vec4 bil = s00 * (1.0 - f.x) * (1.0 - f.y)
-	         + s10 * f.x * (1.0 - f.y)
-	         + s01 * (1.0 - f.x) * f.y
-	         + s11 * f.x * f.y;
-	vec4 outC = mix(s00, bil, mixAmt);
+	// Gamma-corrected premultiplied mix along the edge axis: sRGB -> linear via
+	// x*x, mix, then square root back, for a clean non-muddy transition.
+	vec3 linS = p00.rgb * p00.rgb;
+	vec3 linO = other.rgb * other.rgb;
+	vec4 field;
+	field.rgb = mix(linS, linO, t);
+	field.a = mix(p00.a, other.a, t);
+	vec4 outC;
+	outC.rgb = mix(linS, field.rgb, mixAmt);
+	outC.a = mix(p00.a, field.a, mixAmt);
 	outC.rgb = outC.a > 1e-4 ? outC.rgb / outC.a : vec3(0.0);
-	FragColor = outC * vColor;
+	outC.rgb = sqrt(outC.rgb);
+	FragColor = vec4(outC.rgb, outC.a) * vColor;
 }
 )";
 
