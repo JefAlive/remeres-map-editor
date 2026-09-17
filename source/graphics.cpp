@@ -1444,7 +1444,7 @@ wxMemoryDC* GameSprite::getDC(SpriteSize spriteSize) {
 		wxBitmap bitMap;
 
 		// Large previews always upscale with the classic 2xSaI filter; the editor
-		// scaling filter (View -> Scaling Filter) only affects the map view.
+		// scaling filter (View -> Anti-aliasing) only affects the map view.
 		if (spriteSize == SPRITE_SIZE_48x48 && wxImage.GetWidth() > 0 && wxImage.GetHeight() > 0) {
 			const float target = static_cast<float>(rme::SpritePixels * 3 / 2);
 			const float scaleX = target / static_cast<float>(wxImage.GetWidth());

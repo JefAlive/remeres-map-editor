@@ -133,11 +133,11 @@
         <item name="Zoom In" hotkey="Ctrl++" action="ZOOM_IN" help="Increase the zoom."/>
         <item name="Zoom Out" hotkey="Ctrl+-" action="ZOOM_OUT" help="Decrease the zoom."/>
         <item name="Zoom Normal" hotkey="Ctrl+0" action="ZOOM_NORMAL" help="Normal zoom(100%)."/>
-        <menu name="Scaling Filter">
-            <item name="$Nearest (off)" action="SCALE_FILTER_NONE" help="Plain nearest-neighbour sampling when zoomed in."/>
-            <item name="Smooth $Retro" action="SCALE_FILTER_RETRO" help="Crisp pixel cores with soft, edge-gated borders."/>
-            <item name="$2xSaI" action="SCALE_FILTER_2XSAI" help="Classic 2xSaI pixel-art upscaler."/>
-            <item name="$xBR (4x)" action="SCALE_FILTER_XBR" help="Hyllian xBR level-2 pixel-art upscaler (4x)."/>
+        <menu name="Anti-aliasing">
+            <item name="$Off (sharp pixels)" action="SCALE_FILTER_NONE" help="No smoothing; crisp pixels."/>
+            <item name="Smooth $Retro" action="SCALE_FILTER_RETRO" help="Soft borders, crisp cores."/>
+            <item name="$CRT Blend" action="SCALE_FILTER_2XSAI" help="Soft, analog-TV blending."/>
+            <item name="Smooth $Edges (xBRZ)" action="SCALE_FILTER_XBR" help="xBRZ 4x anti-aliasing."/>
         </menu>
         <separator/>
         <item name="$Show shade" hotkey="Q" action="SHOW_SHADE" help="Shade lower floors."/>

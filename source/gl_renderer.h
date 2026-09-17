@@ -55,6 +55,11 @@ public:
 	void beginFBO();
 	void endFBO();
 	void blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight);
+	void presentComposite(int outputWidth, int outputHeight, bool rebuild);
+	bool compositeFits(int width, int height);
+	bool hasComposite() const {
+		return compositeFbo != 0 && compositePrograms[0].program != 0;
+	}
 	bool hasFBO() const {
 		return fboData.fbo != 0;
 	}
@@ -88,15 +93,47 @@ private:
 	GLuint retroVao = 0;
 	GLuint retroVbo = 0;
 
-	// Pixel-art scalers (2xSaI / xBR) post-process pass; reuses retroVao/Vbo
+	// xBRZ (4x) pixel-art scaler post-process pass; reuses retroVao/Vbo
 	GLuint scalProgram = 0;
 	GLint scal_loc_projection = -1;
 	GLint scal_loc_texture = -1;
 	GLint scal_loc_texSize = -1;
 	GLint scal_loc_sourceCellSize = -1;
 	GLint scal_loc_outputCellSize = -1;
-	GLint scal_loc_mode = -1;
 	std::array<float, 16> projection {};
+
+	// MDAPT + ScaleFX-Hybrid + sharpsmoother composite chain (SCALE_FILTER == 2).
+	// Passes 0-4 run MDAPT (native res), 5-9 run ScaleFX-Hybrid (last pass at 3x),
+	// pass 10 runs sharpsmoother as the final screen resolve.
+	static constexpr int COMPOSITE_PASS_COUNT = 11;
+	static constexpr int COMPOSITE_TARGET_COUNT = 6;
+	struct CompositeProgram {
+		GLuint program = 0;
+		GLint loc_projection = -1;
+		GLint loc_texture = -1;
+		GLint loc_orig = -1;
+		GLint loc_prev2 = -1;
+		GLint loc_prev5 = -1;
+		GLint loc_alpha = -1;
+		GLint loc_texSize = -1;
+		GLint loc_outSize = -1;
+		GLint loc_inputSize = -1;
+	};
+	std::array<CompositeProgram, COMPOSITE_PASS_COUNT> compositePrograms {};
+	struct CompositeTarget {
+		GLuint texture = 0;
+		int width = 0;
+		int height = 0;
+		bool linear = false;
+		bool highPrecision = false;
+	};
+	std::array<CompositeTarget, COMPOSITE_TARGET_COUNT> compositeTargets {};
+	GLuint compositeFbo = 0;
+	GLuint compositeVao = 0;
+	GLuint compositeVbo = 0;
+	void ensureCompositeTarget(int index, int w, int h, bool linear, bool highPrecision);
+	void destroyCompositeTargets();
+	void runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex);
 
 	struct Vertex {
 		float x;

@@ -263,22 +263,31 @@ bool MapDrawer::isSceneDirty() const {
 
 void MapDrawer::Draw() {
 	// Supersampled scene FBO. Smooth Retro resolves it with a single GL_LINEAR
-	// blit (mirroring OTClient's SMOOTH_RETRO); the pixel-art scalers (2xSaI /
-	// xBR) sample the same FBO in integer "source cells". Rendering the scene
-	// at an integer texel density (K scene pixels per map unit) keeps those
-	// cells aligned at fractional zooms, so 125/150/175% no longer fall back.
+	// blit (mirroring OTClient's SMOOTH_RETRO); the xBRZ scaler samples the same
+	// FBO in integer "source cells". Rendering the scene at an integer texel
+	// density (K scene pixels per map unit) keeps those cells aligned at
+	// fractional zooms, so 125/150/175% no longer fall back. The composite chain
+	// instead works on a native-resolution scene (see below).
 	const int scaleFilter = g_settings.getInteger(Config::SCALE_FILTER);
 	int fboWidth = screensize_x;
 	int fboHeight = screensize_y;
 	bool fboSmooth = false;
 	int sourceCellSize = 1;
-	if (scaleFilter == 2 || scaleFilter == 3) {
+	if (scaleFilter == 2) {
+		// The composite chain (MDAPT + ScaleFX-Hybrid + sharpsmoother) processes
+		// the scene at native resolution: one FBO texel per map pixel while zoomed
+		// in, window-sized otherwise. The chain then upscales to outputCellSize.
+		const float nativeScale = std::min(zoom, 1.0f);
+		fboWidth = std::max(1, static_cast<int>(std::lround(screensize_x * nativeScale)));
+		fboHeight = std::max(1, static_cast<int>(std::lround(screensize_y * nativeScale)));
+		sourceCellSize = 0;
+	} else if (scaleFilter == 3) {
 		// Disabled until the supersampled FBO is actually allocated below.
 		sourceCellSize = 0;
 	}
-	// Smooth Retro always supersamples; the pixel-art scalers only magnify, so
-	// they supersample just while zoomed in and stay window-sized otherwise.
-	if (scaleFilter == 1 || ((scaleFilter == 2 || scaleFilter == 3) && zoom < 1.0f)) {
+	// Smooth Retro always supersamples; the xBRZ scaler only magnifies, so it
+	// supersamples just while zoomed in and stays window-sized otherwise.
+	if (scaleFilter == 1 || (scaleFilter == 3 && zoom < 1.0f)) {
 		int density = 1;
 		if (zoom < 1.0f) {
 			density = std::max(1, static_cast<int>(std::ceil(1.0f / zoom)));
@@ -297,7 +306,8 @@ void MapDrawer::Draw() {
 	}
 	renderer->ensureFBO(fboWidth, fboHeight, fboSmooth);
 
-	if (isSceneDirty()) {
+	const bool sceneRebuilt = isSceneDirty();
+	if (sceneRebuilt) {
 		renderer->beginFBO();
 
 		DrawBackground();
@@ -321,10 +331,14 @@ void MapDrawer::Draw() {
 	}
 
 	if (renderer->hasFBO()) {
-		float w = screensize_x * zoom;
-		float h = screensize_y * zoom;
-		float outputCellSize = 1.0f / zoom;
-		renderer->blitFBO(w, h, sourceCellSize, outputCellSize, screensize_x, screensize_y);
+		if (scaleFilter == 2 && renderer->compositeFits(fboWidth, fboHeight)) {
+			renderer->presentComposite(screensize_x, screensize_y, sceneRebuilt);
+		} else {
+			float w = screensize_x * zoom;
+			float h = screensize_y * zoom;
+			float outputCellSize = 1.0f / zoom;
+			renderer->blitFBO(w, h, sourceCellSize, outputCellSize, screensize_x, screensize_y);
+		}
 	}
 
 	DrawDraggingShadow();
