@@ -273,13 +273,19 @@ void MapDrawer::Draw() {
 	int fboHeight = screensize_y;
 	bool fboSmooth = false;
 	int sourceCellSize = 1;
+	int sceneDensity = 0;
+	const float viewWidth = screensize_x * zoom;
+	const float viewHeight = screensize_y * zoom;
+	float sceneWidth = viewWidth;
+	float sceneHeight = viewHeight;
 	if (scaleFilter == 2) {
 		// The composite chain (MDAPT + ScaleFX-Hybrid + sharpsmoother) processes
 		// the scene at native resolution: one FBO texel per map pixel while zoomed
 		// in, window-sized otherwise. The chain then upscales to outputCellSize.
 		const float nativeScale = std::min(zoom, 1.0f);
-		fboWidth = std::max(1, static_cast<int>(std::lround(screensize_x * nativeScale)));
-		fboHeight = std::max(1, static_cast<int>(std::lround(screensize_y * nativeScale)));
+		fboWidth = std::max(1, static_cast<int>(std::ceil(screensize_x * nativeScale)));
+		fboHeight = std::max(1, static_cast<int>(std::ceil(screensize_y * nativeScale)));
+		sceneDensity = zoom <= 1.0f ? 1 : 0;
 		sourceCellSize = 0;
 	} else if (scaleFilter == 3) {
 		// Disabled until the supersampled FBO is actually allocated below.
@@ -293,8 +299,9 @@ void MapDrawer::Draw() {
 			density = std::max(1, static_cast<int>(std::ceil(1.0f / zoom)));
 		}
 		const float supersample = std::min(static_cast<float>(density) * zoom, 2.0f);
-		const int candidateW = static_cast<int>(std::lround(screensize_x * supersample));
-		const int candidateH = static_cast<int>(std::lround(screensize_y * supersample));
+		const bool integerDensity = zoom <= 2.0f;
+		const int candidateW = integerDensity ? static_cast<int>(std::ceil(viewWidth)) * density : static_cast<int>(std::lround(screensize_x * supersample));
+		const int candidateH = integerDensity ? static_cast<int>(std::ceil(viewHeight)) * density : static_cast<int>(std::lround(screensize_y * supersample));
 		int maxTextureSize = 0;
 		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
 		if (candidateW > 0 && candidateH > 0 && (maxTextureSize <= 0 || (candidateW <= maxTextureSize && candidateH <= maxTextureSize))) {
@@ -302,13 +309,21 @@ void MapDrawer::Draw() {
 			fboHeight = candidateH;
 			fboSmooth = scaleFilter == 1;
 			sourceCellSize = density;
+			sceneDensity = integerDensity ? density : 0;
 		}
+	}
+	if (sceneDensity > 0) {
+		sceneWidth = static_cast<float>(fboWidth) / sceneDensity;
+		sceneHeight = static_cast<float>(fboHeight) / sceneDensity;
 	}
 	renderer->ensureFBO(fboWidth, fboHeight, fboSmooth);
 
 	const bool sceneRebuilt = isSceneDirty();
 	if (sceneRebuilt) {
 		renderer->beginFBO();
+		if (renderer->hasFBO()) {
+			renderer->setOrtho(0, sceneWidth, sceneHeight, 0);
+		}
 
 		DrawBackground();
 		DrawMap();
@@ -330,14 +345,13 @@ void MapDrawer::Draw() {
 		fboDirty = false;
 	}
 
+	renderer->setOrtho(0, viewWidth, viewHeight, 0);
 	if (renderer->hasFBO()) {
 		if (scaleFilter == 2 && renderer->compositeFits(fboWidth, fboHeight)) {
-			renderer->presentComposite(screensize_x, screensize_y, sceneRebuilt);
+			renderer->presentComposite(screensize_x, screensize_y, sceneRebuilt, viewWidth / sceneWidth, viewHeight / sceneHeight);
 		} else {
-			float w = screensize_x * zoom;
-			float h = screensize_y * zoom;
 			float outputCellSize = 1.0f / zoom;
-			renderer->blitFBO(w, h, sourceCellSize, outputCellSize, screensize_x, screensize_y);
+			renderer->blitFBO(sceneWidth, sceneHeight, sourceCellSize, outputCellSize, screensize_x, screensize_y);
 		}
 	}
 

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "clangd": {
+      "command": [
+        "clangd",
+        "--compile-commands-dir=build/linux-release",
+        "--background-index",
+        "--clang-tidy",
+        "--header-insertion=never",
+        "--completion-style=detailed",
+        "-j=4"
+      ]
+    },
+    "cmake": {
+      "command": ["cmake-language-server"]
+    },
+    "xml": {
+      "command": ["lemminx"]
+    },
+    "glsl": {
+      "command": ["shader-language-server"]
+    }
+  },
+  "mcp": {
+    "ai-memory": {
+      "type": "remote",
+      "url": "http://127.0.0.1:49374/mcp"
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true
+    }
+  },
+  "permission": {
+    "bash": {
+      "cmake --build *": "allow",
+      "ninja *": "allow",
+      "git diff*": "allow",
+      "git status*": "allow",
+      "git log*": "allow",
+      "clang-format *": "allow"
+    }
+  }
+}

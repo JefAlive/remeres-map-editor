@@ -244,17 +244,14 @@ void SpriteSheet::releaseGLTexture() {
 SpriteUV SpriteSheet::getSpriteUVs(int spriteId) const {
 	auto size = getSpriteSize();
 	int spriteOffset = spriteId - firstId;
-	int allColumns = (size.width == 32) ? 12 : 6;
+	int allColumns = SPRITE_SHEET_WIDTH / size.width;
 	int row = spriteOffset / allColumns;
 	int col = spriteOffset % allColumns;
 
-	constexpr float halfTexelU = 0.5f / float(SPRITE_SHEET_WIDTH);
-	constexpr float halfTexelV = 0.5f / float(SPRITE_SHEET_HEIGHT);
-
-	float u0 = float(col * size.width) / float(SPRITE_SHEET_WIDTH) + halfTexelU;
-	float v0 = float(row * size.height) / float(SPRITE_SHEET_HEIGHT) + halfTexelV;
-	float u1 = float((col + 1) * size.width) / float(SPRITE_SHEET_WIDTH) - halfTexelU;
-	float v1 = float((row + 1) * size.height) / float(SPRITE_SHEET_HEIGHT) - halfTexelV;
+	float u0 = float(col * size.width) / float(SPRITE_SHEET_WIDTH);
+	float v0 = float(row * size.height) / float(SPRITE_SHEET_HEIGHT);
+	float u1 = float((col + 1) * size.width) / float(SPRITE_SHEET_WIDTH);
+	float v1 = float((row + 1) * size.height) / float(SPRITE_SHEET_HEIGHT);
 	return { u0, v0, u1, v1 };
 }
 

@@ -410,7 +410,7 @@ void main() {
 	// texel density of one sprite pixel in the supersampled FBO. The
 	// neighbourhood is therefore fetched at `base + offset * sourceCs`, but
 	// the intra-pixel fraction that selects the pattern lives in output space.
-	vec2 p = gl_FragCoord.xy / outputCs;
+	vec2 p = vUV * uTexSize / float(sourceCs);
 	ivec2 c = ivec2(int(floor(p.x)), int(floor(p.y)));
 	vec2 f = p - vec2(c);
 	ivec2 base = c * sourceCs;
@@ -1547,7 +1547,7 @@ void GLRenderer::destroyCompositeTargets() {
 	}
 }
 
-void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex) {
+void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX, float sourceScaleY) {
 	auto &p = compositePrograms[pass];
 	if (p.program == 0) {
 		return;
@@ -1615,11 +1615,11 @@ void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inp
 	}
 
 	const RetroVertex verts[6] = {
-		{ -1.0f, -1.0f, 0.0f, 0.0f, 255, 255, 255, 255 },
-		{ 1.0f, -1.0f, 1.0f, 0.0f, 255, 255, 255, 255 },
-		{ 1.0f, 1.0f, 1.0f, 1.0f, 255, 255, 255, 255 },
-		{ -1.0f, -1.0f, 0.0f, 0.0f, 255, 255, 255, 255 },
-		{ 1.0f, 1.0f, 1.0f, 1.0f, 255, 255, 255, 255 },
+		{ -1.0f, -1.0f, 0.0f, 1.0f - sourceScaleY, 255, 255, 255, 255 },
+		{ 1.0f, -1.0f, sourceScaleX, 1.0f - sourceScaleY, 255, 255, 255, 255 },
+		{ 1.0f, 1.0f, sourceScaleX, 1.0f, 255, 255, 255, 255 },
+		{ -1.0f, -1.0f, 0.0f, 1.0f - sourceScaleY, 255, 255, 255, 255 },
+		{ 1.0f, 1.0f, sourceScaleX, 1.0f, 255, 255, 255, 255 },
 		{ -1.0f, 1.0f, 0.0f, 1.0f, 255, 255, 255, 255 },
 	};
 	glBindVertexArray(compositeVao);
@@ -1630,7 +1630,7 @@ void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inp
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuild) {
+void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY) {
 	if (fboData.fbo == 0 || !hasComposite()) {
 		return;
 	}
@@ -1686,7 +1686,7 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 		// sharpsmoother resolve into the screen-sized target, restoring the map
 		// alpha so the editor background shows through where the scene is
 		// transparent. Cached with the rest of the chain.
-		runCompositePass(10, compositeTargets[5].texture, tripleW, tripleH, 0, 0, 0, 6, outputWidth, outputHeight, fboData.texture);
+		runCompositePass(10, compositeTargets[5].texture, tripleW, tripleH, 0, 0, 0, 6, outputWidth, outputHeight, fboData.texture, sourceScaleX, sourceScaleY);
 	}
 
 	if (compositeTargets[6].texture == 0) {
