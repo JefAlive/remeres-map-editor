@@ -1707,6 +1707,65 @@ void MapCanvas::OnGainMouse(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnKeyDown(wxKeyEvent &event) {
+	MapWindow* window = GetMapWindow();
+
+	// WASD map panning and Q/E floor navigation take priority over other
+	// shortcuts; only bare keys so Ctrl/Alt/Shift menu shortcuts stay intact.
+	if (!event.ControlDown() && !event.AltDown() && !event.ShiftDown()) {
+		switch (event.GetKeyCode()) {
+			case 'W':
+			case 'w': {
+				int start_x, start_y;
+				window->GetViewStart(&start_x, &start_y);
+				int tiles = (zoom == 1.0) ? 1 : 3;
+				window->Scroll(start_x, int(start_y - rme::TileSize * tiles * zoom));
+				UpdatePositionStatus();
+				Refresh();
+				return;
+			}
+			case 'S':
+			case 's': {
+				int start_x, start_y;
+				window->GetViewStart(&start_x, &start_y);
+				int tiles = (zoom == 1.0) ? 1 : 3;
+				window->Scroll(start_x, int(start_y + rme::TileSize * tiles * zoom));
+				UpdatePositionStatus();
+				Refresh();
+				return;
+			}
+			case 'A':
+			case 'a': {
+				int start_x, start_y;
+				window->GetViewStart(&start_x, &start_y);
+				int tiles = (zoom == 1.0) ? 1 : 3;
+				window->Scroll(int(start_x - rme::TileSize * tiles * zoom), start_y);
+				UpdatePositionStatus();
+				Refresh();
+				return;
+			}
+			case 'D':
+			case 'd': {
+				int start_x, start_y;
+				window->GetViewStart(&start_x, &start_y);
+				int tiles = (zoom == 1.0) ? 1 : 3;
+				window->Scroll(int(start_x + rme::TileSize * tiles * zoom), start_y);
+				UpdatePositionStatus();
+				Refresh();
+				return;
+			}
+			case 'Q':
+			case 'q': { // Go down a floor
+				g_gui.ChangeFloor(floor + 1);
+				return;
+			}
+			case 'E':
+			case 'e': { // Go up a floor
+				g_gui.ChangeFloor(floor - 1);
+				return;
+			}
+		}
+	}
+
 // wxGTK does not propagate keyboard events from wxGLCanvas
 // to the frame's accelerator table, so we dispatch manually.
 #ifdef __LINUX__
@@ -1714,7 +1773,6 @@ void MapCanvas::OnKeyDown(wxKeyEvent &event) {
 		return;
 	}
 #endif
-	MapWindow* window = GetMapWindow();
 
 	switch (event.GetKeyCode()) {
 		case WXK_NUMPAD_ADD:
