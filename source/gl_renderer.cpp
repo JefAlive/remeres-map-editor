@@ -104,10 +104,6 @@ float rSmooth(float e0, float e1, float x) {
 	return t * t * (3.0 - 2.0 * t);
 }
 
-vec4 rTex(ivec2 lim, ivec2 p) {
-	return texelFetch(uTexture, clamp(p, ivec2(0), lim), 0);
-}
-
 void main() {
 	// No magnification: plain nearest sampling (same look as the plain FBO blit)
 	if (uCellSize <= 1.0f) {
@@ -124,70 +120,44 @@ void main() {
 	// so each cell's base TEXEL is c * uCellSize, not the cell index itself.
 	ivec2 base = c * cs;
 
-	// Centre + 4 cardinals only: the diagonals are never fetched, so a corner
-	// can't smear colour across itself (the old 2x2 bilinear pulled in the
-	// diagonal neighbour and rounded every corner).
-	vec4 s00 = rTex(lim, base);
-	vec4 s10 = rTex(lim, base + ivec2(cs, 0));
-	vec4 s01 = rTex(lim, base + ivec2(0, cs));
-	vec4 sL  = rTex(lim, base + ivec2(-cs, 0));
-	vec4 sU  = rTex(lim, base + ivec2(0, -cs));
+	vec4 s00 = texelFetch(uTexture, clamp(base, ivec2(0, 0), lim), 0);
+	vec4 s10 = texelFetch(uTexture, clamp(base + ivec2(cs, 0), ivec2(0, 0), lim), 0);
+	vec4 s01 = texelFetch(uTexture, clamp(base + ivec2(0, cs), ivec2(0, 0), lim), 0);
+	vec4 s11 = texelFetch(uTexture, clamp(base + ivec2(cs, cs), ivec2(0, 0), lim), 0);
+	s00.rgb *= s00.a;
+	s10.rgb *= s10.a;
+	s01.rgb *= s01.a;
+	s11.rgb *= s11.a;
 
-	// Premultiplied copies: a transparent neighbour contributes no colour, so
-	// the blend can never pull black (dark fringes) across alpha borders.
-	vec4 p00 = vec4(s00.rgb * s00.a, s00.a);
-	vec4 pR  = vec4(s10.rgb * s10.a, s10.a);
-	vec4 pD  = vec4(s01.rgb * s01.a, s01.a);
-	vec4 pL  = vec4(sL.rgb * sL.a, sL.a);
-	vec4 pU  = vec4(sU.rgb * sU.a, sU.a);
-
-	// Keep semi-transparent cells crisp: soft blending is applied only on the
-	// opaque side of an edge, transparencies keep hard pixel boundaries.
-	if (s00.a < 0.5f) {
-		FragColor = s00 * vColor;
-		return;
-	}
-
-	// Edge direction on premultiplied luma, so transparent neighbours no longer
-	// fake strong black edges for the detector.
-	float gX = abs(rLum(pL.rgb) - rLum(pR.rgb));
-	float gY = abs(rLum(pU.rgb) - rLum(pD.rgb));
-	float gMax = max(gX, gY);
+	vec4 cL = texelFetch(uTexture, clamp(base + ivec2(-cs, 0), ivec2(0, 0), lim), 0);
+	vec4 cR = texelFetch(uTexture, clamp(base + ivec2( cs, 0), ivec2(0, 0), lim), 0);
+	vec4 cU = texelFetch(uTexture, clamp(base + ivec2(0, -cs), ivec2(0, 0), lim), 0);
+	vec4 cD = texelFetch(uTexture, clamp(base + ivec2(0, cs), ivec2(0, 0), lim), 0);
+	cL.rgb *= cL.a;
+	cR.rgb *= cR.a;
+	cU.rgb *= cU.a;
+	cD.rgb *= cD.a;
 
 	// Edge-gated blend: only soften borders where pixels actually differ
-	float maxDiff = max(max(abs(rLum(pL.rgb) - rLum(p00.rgb)), abs(rLum(pR.rgb) - rLum(p00.rgb))),
-	                    max(abs(rLum(pU.rgb) - rLum(p00.rgb)), abs(rLum(pD.rgb) - rLum(p00.rgb))));
+	float l00 = rLum(s00.rgb);
+	float maxDiff = max(max(abs(l00 - rLum(cL.rgb)), abs(l00 - rLum(cR.rgb))),
+	                    max(abs(l00 - rLum(cU.rgb)), abs(l00 - rLum(cD.rgb))));
 	float edgeGain = rSmooth(0.02, 0.12, maxDiff);
-
-	// Blend only along the dominant edge axis: a vertical edge pulls colour
-	// from left/right, a horizontal one from up/down.
-	bool useX = gX >= gY;
-	float t = useX ? f.x : f.y;
-	vec4 other = useX ? pR : pD;
-	// When the change is spread over both axes (corner/diagonal) the one-axis
-	// blend would cut a diagonal, so snap back toward the crisp core.
-	float corner = rSmooth(1.25, 2.5, min(gX, gY) / max(gMax, 1e-5));
 
 	// Blend only in the outer fringe of each cell so the apparent border stays
 	// glued to the pick grid (perceived edge = real grid line)
 	float interior = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
 	float border = 1.0 - rSmooth(0.30, 0.50, clamp(interior, 0.0, 0.5));
 
-	float mixAmt = 0.65f * edgeGain * border * (1.0 - corner);
+	float mixAmt = 0.6f * edgeGain * border;
 
-	// Gamma-corrected premultiplied mix along the edge axis: sRGB -> linear via
-	// x*x, mix, then square root back, for a clean non-muddy transition.
-	vec3 linS = p00.rgb * p00.rgb;
-	vec3 linO = other.rgb * other.rgb;
-	vec4 field;
-	field.rgb = mix(linS, linO, t);
-	field.a = mix(p00.a, other.a, t);
-	vec4 outC;
-	outC.rgb = mix(linS, field.rgb, mixAmt);
-	outC.a = mix(p00.a, field.a, mixAmt);
+	vec4 bil = s00 * (1.0 - f.x) * (1.0 - f.y)
+	         + s10 * f.x * (1.0 - f.y)
+	         + s01 * (1.0 - f.x) * f.y
+	         + s11 * f.x * f.y;
+	vec4 outC = mix(s00, bil, mixAmt);
 	outC.rgb = outC.a > 1e-4 ? outC.rgb / outC.a : vec3(0.0);
-	outC.rgb = sqrt(outC.rgb);
-	FragColor = vec4(outC.rgb, outC.a) * vColor;
+	FragColor = outC * vColor;
 }
 )";
 
@@ -202,7 +172,8 @@ in vec2 vUV;
 in vec4 vColor;
 uniform sampler2D uTexture;
 uniform vec2 uTexSize;
-uniform float uCellSize;
+uniform int uSourceCellSize;
+uniform float uOutputCellSize;
 uniform int uMode; // 1 = 2xSaI, 2 = xBR
 out vec4 FragColor;
 
@@ -354,9 +325,9 @@ float xbrCdf(vec3 a, vec3 b) {
 	return d.r + d.g + d.b;
 }
 
-vec3 xbrScale(ivec2 base, int cs, vec2 fp) {
+vec3 xbrScale(ivec2 base, int sourceCs, float outputCs, vec2 fp) {
 	const vec3 rgbw = vec3(14.352, 28.176, 5.472);
-	float scl = clamp(float(cs), 1.0, 4.0);
+	float scl = clamp(outputCs, 1.0, 4.0);
 	vec4 delta = vec4(1.0 / scl);
 	vec4 delta_l = vec4(0.5 / scl, 1.0 / scl, 0.5 / scl, 1.0 / scl);
 	vec4 delta_u = delta_l.yxwz;
@@ -372,27 +343,27 @@ vec3 xbrScale(ivec2 base, int cs, vec2 fp) {
 	const vec4 Cy = vec4(2.0, 0.0, -1.0, 0.5);
 	const vec4 Ci = vec4(0.25, 0.25, 0.25, 0.25);
 
-	vec3 a1 = colOf(base + ivec2(-cs, -2 * cs));
-	vec3 b1 = colOf(base + ivec2(0, -2 * cs));
-	vec3 c1 = colOf(base + ivec2(cs, -2 * cs));
-	vec3 a2 = colOf(base + ivec2(-cs, -cs));
-	vec3 b2 = colOf(base + ivec2(0, -cs));
-	vec3 c2 = colOf(base + ivec2(cs, -cs));
-	vec3 d2 = colOf(base + ivec2(-cs, 0));
+	vec3 a1 = colOf(base + ivec2(-sourceCs, -2 * sourceCs));
+	vec3 b1 = colOf(base + ivec2(0, -2 * sourceCs));
+	vec3 c1 = colOf(base + ivec2(sourceCs, -2 * sourceCs));
+	vec3 a2 = colOf(base + ivec2(-sourceCs, -sourceCs));
+	vec3 b2 = colOf(base + ivec2(0, -sourceCs));
+	vec3 c2 = colOf(base + ivec2(sourceCs, -sourceCs));
+	vec3 d2 = colOf(base + ivec2(-sourceCs, 0));
 	vec3 e2 = colOf(base);
-	vec3 f2 = colOf(base + ivec2(cs, 0));
-	vec3 g2 = colOf(base + ivec2(-cs, cs));
-	vec3 h2 = colOf(base + ivec2(0, cs));
-	vec3 i2 = colOf(base + ivec2(cs, cs));
-	vec3 g5 = colOf(base + ivec2(-cs, 2 * cs));
-	vec3 h5 = colOf(base + ivec2(0, 2 * cs));
-	vec3 i5 = colOf(base + ivec2(cs, 2 * cs));
-	vec3 a0 = colOf(base + ivec2(-2 * cs, -cs));
-	vec3 d0 = colOf(base + ivec2(-2 * cs, 0));
-	vec3 g0 = colOf(base + ivec2(-2 * cs, cs));
-	vec3 c4 = colOf(base + ivec2(2 * cs, -cs));
-	vec3 f4 = colOf(base + ivec2(2 * cs, 0));
-	vec3 i4 = colOf(base + ivec2(2 * cs, cs));
+	vec3 f2 = colOf(base + ivec2(sourceCs, 0));
+	vec3 g2 = colOf(base + ivec2(-sourceCs, sourceCs));
+	vec3 h2 = colOf(base + ivec2(0, sourceCs));
+	vec3 i2 = colOf(base + ivec2(sourceCs, sourceCs));
+	vec3 g5 = colOf(base + ivec2(-sourceCs, 2 * sourceCs));
+	vec3 h5 = colOf(base + ivec2(0, 2 * sourceCs));
+	vec3 i5 = colOf(base + ivec2(sourceCs, 2 * sourceCs));
+	vec3 a0 = colOf(base + ivec2(-2 * sourceCs, -sourceCs));
+	vec3 d0 = colOf(base + ivec2(-2 * sourceCs, 0));
+	vec3 g0 = colOf(base + ivec2(-2 * sourceCs, sourceCs));
+	vec3 c4 = colOf(base + ivec2(2 * sourceCs, -sourceCs));
+	vec3 f4 = colOf(base + ivec2(2 * sourceCs, 0));
+	vec3 i4 = colOf(base + ivec2(2 * sourceCs, sourceCs));
 
 	vec4 bv = vec4(dot(b2, rgbw), dot(d2, rgbw), dot(h2, rgbw), dot(f2, rgbw));
 	vec4 cv = vec4(dot(c2, rgbw), dot(a2, rgbw), dot(g2, rgbw), dot(i2, rgbw));
@@ -455,18 +426,26 @@ vec3 xbrScale(ivec2 base, int cs, vec2 fp) {
 }
 
 void main() {
-	int cs = max(1, int(uCellSize + 0.5f));
-	if (cs < 2) {
+	int sourceCs = max(1, uSourceCellSize);
+	float outputCs = max(1.0f, uOutputCellSize);
+
+	// Below one screen pixel per sprite pixel the scalers would have to
+	// minify; leave that to the plain (nearest / smooth) blit.
+	if (outputCs <= 1.0f) {
 		FragColor = texture(uTexture, vUV) * vColor;
 		return;
 	}
 
-	vec2 p = gl_FragCoord.xy / float(cs);
+	// `outputCs` maps screen pixels to sprite pixels, while `sourceCs` is the
+	// texel density of one sprite pixel in the supersampled FBO. The
+	// neighbourhood is therefore fetched at `base + offset * sourceCs`, but
+	// the intra-pixel fraction that selects the pattern lives in output space.
+	vec2 p = gl_FragCoord.xy / outputCs;
 	ivec2 c = ivec2(int(floor(p.x)), int(floor(p.y)));
 	vec2 f = p - vec2(c);
-	ivec2 base = c * cs;
+	ivec2 base = c * sourceCs;
 
-	vec3 color = (uMode == 1) ? saiScale(base, cs, f) : xbrScale(base, cs, f);
+	vec3 color = (uMode == 1) ? saiScale(base, sourceCs, f) : xbrScale(base, sourceCs, outputCs, f);
 	float a = texS(base).a;
 	FragColor = vec4(color, a) * vColor;
 }
@@ -806,7 +785,8 @@ void GLRenderer::init() {
 		scal_loc_projection = glGetUniformLocation(scalProgram, "uProjection");
 		scal_loc_texture = glGetUniformLocation(scalProgram, "uTexture");
 		scal_loc_texSize = glGetUniformLocation(scalProgram, "uTexSize");
-		scal_loc_cellSize = glGetUniformLocation(scalProgram, "uCellSize");
+		scal_loc_sourceCellSize = glGetUniformLocation(scalProgram, "uSourceCellSize");
+		scal_loc_outputCellSize = glGetUniformLocation(scalProgram, "uOutputCellSize");
 		scal_loc_mode = glGetUniformLocation(scalProgram, "uMode");
 	}
 
@@ -1397,8 +1377,8 @@ void GLRenderer::invalidateTexture(GLuint id) {
 	}
 }
 
-void GLRenderer::ensureFBO(int w, int h) {
-	if (fboData.fbo != 0 && fboData.width == w && fboData.height == h) {
+void GLRenderer::ensureFBO(int w, int h, bool smooth) {
+	if (fboData.fbo != 0 && fboData.width == w && fboData.height == h && fboData.smooth == smooth) {
 		return;
 	}
 	destroyFBO();
@@ -1409,8 +1389,9 @@ void GLRenderer::ensureFBO(int w, int h) {
 	glGenTextures(1, &fboData.texture);
 	glBindTexture(GL_TEXTURE_2D, fboData.texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	const GLint fboFilter = smooth ? GL_LINEAR : GL_NEAREST;
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, fboFilter);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, fboFilter);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboData.texture, 0);
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -1424,6 +1405,7 @@ void GLRenderer::ensureFBO(int w, int h) {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	fboData.width = w;
 	fboData.height = h;
+	fboData.smooth = smooth;
 }
 
 void GLRenderer::destroyFBO() {
@@ -1437,11 +1419,13 @@ void GLRenderer::destroyFBO() {
 	}
 	fboData.width = 0;
 	fboData.height = 0;
+	fboData.smooth = false;
 }
 
 void GLRenderer::beginFBO() {
 	if (fboData.fbo != 0) {
 		glBindFramebuffer(GL_FRAMEBUFFER, fboData.fbo);
+		glViewport(0, 0, fboData.width, fboData.height);
 	}
 }
 
@@ -1451,28 +1435,23 @@ void GLRenderer::endFBO() {
 	}
 }
 
-void GLRenderer::blitFBO(float w, float h, float cellScale) {
+void GLRenderer::blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight) {
 	if (fboData.fbo == 0) {
 		return;
 	}
+	glViewport(0, 0, outputWidth, outputHeight);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
 
-	// Spatial upscale: pick the legend-activated algorithm (see View -> Scaling
-	// Filter). 0 = nearest, 1 = Smooth Retro, 2 = 2xSaI, 3 = xBR (4x).
+	// Spatial upscale: 0 = nearest, 1 = Smooth Retro, 2 = 2xSaI, 3 = xBR (4x).
+	// The pixel-art scalers (2xSaI / xBR) only magnify, and need the scene in
+	// integer "source cells" (sourceCellSize FBO texels per sprite pixel) plus
+	// the exact screen-pixel size of a cell (outputCellSize).
 	const int scaleFilter = g_settings.getInteger(Config::SCALE_FILTER);
-	GLuint useScaleProgram = 0;
-	int scaleMode = 0;
-	if (scaleFilter == 1 && retroProgram != 0) {
-		useScaleProgram = retroProgram;
-	} else if ((scaleFilter == 2 || scaleFilter == 3) && scalProgram != 0) {
-		useScaleProgram = scalProgram;
-		scaleMode = scaleFilter == 2 ? 1 : 2;
-	}
-
-	if (cellScale >= 1.0f && useScaleProgram != 0) {
+	if ((scaleFilter == 2 || scaleFilter == 3) && scalProgram != 0 && sourceCellSize >= 1 && outputCellSize > 1.0f) {
+		const int scaleMode = scaleFilter == 2 ? 1 : 2;
 		const RetroVertex verts[6] = {
 			{ 0.0f, 0.0f, 0.0f, 1.0f, 255, 255, 255, 255 },
 			{ w, 0.0f, 1.0f, 1.0f, 255, 255, 255, 255 },
@@ -1482,21 +1461,15 @@ void GLRenderer::blitFBO(float w, float h, float cellScale) {
 			{ 0.0f, h, 0.0f, 0.0f, 255, 255, 255, 255 },
 		};
 
-		glUseProgram(useScaleProgram);
+		glUseProgram(scalProgram);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, fboData.texture);
-		if (useScaleProgram == retroProgram) {
-			glUniformMatrix4fv(retr_loc_projection, 1, GL_FALSE, projection.data());
-			glUniform1i(retr_loc_texture, 0);
-			glUniform2f(retr_loc_texSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
-			glUniform1f(retr_loc_cellSize, cellScale);
-		} else {
-			glUniformMatrix4fv(scal_loc_projection, 1, GL_FALSE, projection.data());
-			glUniform1i(scal_loc_texture, 0);
-			glUniform2f(scal_loc_texSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
-			glUniform1f(scal_loc_cellSize, cellScale);
-			glUniform1i(scal_loc_mode, scaleMode);
-		}
+		glUniformMatrix4fv(scal_loc_projection, 1, GL_FALSE, projection.data());
+		glUniform1i(scal_loc_texture, 0);
+		glUniform2f(scal_loc_texSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
+		glUniform1i(scal_loc_sourceCellSize, sourceCellSize);
+		glUniform1f(scal_loc_outputCellSize, outputCellSize);
+		glUniform1i(scal_loc_mode, scaleMode);
 
 		glBindVertexArray(retroVao);
 		glBindBuffer(GL_ARRAY_BUFFER, retroVbo);
@@ -1510,6 +1483,9 @@ void GLRenderer::blitFBO(float w, float h, float cellScale) {
 		return;
 	}
 
+	// Nearest and Smooth Retro resolve the scene with a single filtered blit.
+	// Smooth Retro renders into a supersampled FBO (see MapDrawer::Draw) so the
+	// GL_LINEAR texture filter does the antialiasing, with no scaling shader.
 	drawTexturedQuad(0, 0, w, h, fboData.texture, { 255, 255, 255, 255 }, 0.f, 1.f, 1.f, 0.f);
 	flush();
 }

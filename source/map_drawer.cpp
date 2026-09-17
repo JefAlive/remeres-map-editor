@@ -34,6 +34,7 @@
 #include <format>
 #include <array>
 #include <algorithm>
+#include <cmath>
 
 #include "editor.h"
 #include "gui.h"
@@ -248,6 +249,9 @@ bool MapDrawer::isSceneDirty() const {
 	if (screensize_y != prevScreenH) {
 		return true;
 	}
+	if (g_settings.getInteger(Config::SCALE_FILTER) != prevScaleFilter) {
+		return true;
+	}
 	if (dragging || dragging_draw) {
 		return true;
 	}
@@ -258,7 +262,40 @@ bool MapDrawer::isSceneDirty() const {
 }
 
 void MapDrawer::Draw() {
-	renderer->ensureFBO(screensize_x, screensize_y);
+	// Supersampled scene FBO. Smooth Retro resolves it with a single GL_LINEAR
+	// blit (mirroring OTClient's SMOOTH_RETRO); the pixel-art scalers (2xSaI /
+	// xBR) sample the same FBO in integer "source cells". Rendering the scene
+	// at an integer texel density (K scene pixels per map unit) keeps those
+	// cells aligned at fractional zooms, so 125/150/175% no longer fall back.
+	const int scaleFilter = g_settings.getInteger(Config::SCALE_FILTER);
+	int fboWidth = screensize_x;
+	int fboHeight = screensize_y;
+	bool fboSmooth = false;
+	int sourceCellSize = 1;
+	if (scaleFilter == 2 || scaleFilter == 3) {
+		// Disabled until the supersampled FBO is actually allocated below.
+		sourceCellSize = 0;
+	}
+	// Smooth Retro always supersamples; the pixel-art scalers only magnify, so
+	// they supersample just while zoomed in and stay window-sized otherwise.
+	if (scaleFilter == 1 || ((scaleFilter == 2 || scaleFilter == 3) && zoom < 1.0f)) {
+		int density = 1;
+		if (zoom < 1.0f) {
+			density = std::max(1, static_cast<int>(std::ceil(1.0f / zoom)));
+		}
+		const float supersample = std::min(static_cast<float>(density) * zoom, 2.0f);
+		const int candidateW = static_cast<int>(std::lround(screensize_x * supersample));
+		const int candidateH = static_cast<int>(std::lround(screensize_y * supersample));
+		int maxTextureSize = 0;
+		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+		if (candidateW > 0 && candidateH > 0 && (maxTextureSize <= 0 || (candidateW <= maxTextureSize && candidateH <= maxTextureSize))) {
+			fboWidth = candidateW;
+			fboHeight = candidateH;
+			fboSmooth = scaleFilter == 1;
+			sourceCellSize = density;
+		}
+	}
+	renderer->ensureFBO(fboWidth, fboHeight, fboSmooth);
 
 	if (isSceneDirty()) {
 		renderer->beginFBO();
@@ -279,18 +316,15 @@ void MapDrawer::Draw() {
 		prevStartZ = start_z;
 		prevScreenW = screensize_x;
 		prevScreenH = screensize_y;
+		prevScaleFilter = g_settings.getInteger(Config::SCALE_FILTER);
 		fboDirty = false;
 	}
 
 	if (renderer->hasFBO()) {
 		float w = screensize_x * zoom;
 		float h = screensize_y * zoom;
-		// The scene is drawn in map units (1 unit = 1 sprite/drawing pixel) and
-		// each unit spans (1 / zoom) screen pixels, so when zoomed in (zoom < 1)
-		// the Smooth Retro pass has magnification to work with; when zoomed out
-		// the cell scale stays below 1 and it falls back to nearest sampling.
-		float cellScale = 1.0f / zoom;
-		renderer->blitFBO(w, h, cellScale);
+		float outputCellSize = 1.0f / zoom;
+		renderer->blitFBO(w, h, sourceCellSize, outputCellSize, screensize_x, screensize_y);
 	}
 
 	DrawDraggingShadow();

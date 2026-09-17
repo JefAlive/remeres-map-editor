@@ -50,11 +50,11 @@ public:
 	void setBlendMode(unsigned int src, unsigned int dst);
 	void resetBlendMode();
 
-	void ensureFBO(int w, int h);
+	void ensureFBO(int w, int h, bool smooth = false);
 	void destroyFBO();
 	void beginFBO();
 	void endFBO();
-	void blitFBO(float w, float h, float cellScale = 0.0f);
+	void blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight);
 	bool hasFBO() const {
 		return fboData.fbo != 0;
 	}
@@ -93,7 +93,8 @@ private:
 	GLint scal_loc_projection = -1;
 	GLint scal_loc_texture = -1;
 	GLint scal_loc_texSize = -1;
-	GLint scal_loc_cellSize = -1;
+	GLint scal_loc_sourceCellSize = -1;
+	GLint scal_loc_outputCellSize = -1;
 	GLint scal_loc_mode = -1;
 	std::array<float, 16> projection {};
 
@@ -133,6 +134,7 @@ private:
 		GLuint texture = 0;
 		int width = 0;
 		int height = 0;
+		bool smooth = false;
 	};
 	FBOData fboData;
 

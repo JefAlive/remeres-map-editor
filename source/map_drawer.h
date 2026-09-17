@@ -128,6 +128,7 @@ class MapDrawer {
 	int prevStartZ = -1;
 	int prevScreenW = -1;
 	int prevScreenH = -1;
+	int prevScaleFilter = -1;
 	bool fboDirty = true;
 
 	float zoom;
