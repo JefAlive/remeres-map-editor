@@ -1185,7 +1185,7 @@ COMPAT_VARYING vec4 TEX0;
 uniform COMPAT_PRECISION float SFX_CLR;
 uniform COMPAT_PRECISION float SFX_SAA;
 #else
-#define SFX_CLR 0.05
+#define SFX_CLR 0.03
 #define SFX_SAA 0.00
 #endif
 
@@ -1881,7 +1881,7 @@ COMPAT_VARYING vec4 TEX0;
 // All parameter floats need to have COMPAT_PRECISION in front of them
 uniform COMPAT_PRECISION float SFX_RAA;
 #else
-#define SFX_RAA 0.10
+#define SFX_RAA 0.00
 #endif
 
 // extract corners
@@ -2112,7 +2112,11 @@ vec3 dt = vec3(1.0, 1.0, 1.0);
 
 float wt(vec3 A, vec3 B)
 {
-	return clamp(smoot - ((6.0+lumad)/pow(3.0,mtric))*pow(dot(pow(abs(A-B),vec3(1.0/mtric)),dt),mtric)/(dot(A+B,dt)+lumad), min_w, max_w);
+	float lumA = dot(A, vec3(0.2126, 0.7152, 0.0722));
+	float lumB = dot(B, vec3(0.2126, 0.7152, 0.0722));
+	float floor_w = (lumB < lumA) ? 0.0 : min_w;
+	float ceiling_w = (lumB > lumA) ? max_w * smoothstep(0.08, 0.30, lumA) : max_w;
+	return clamp(smoot - ((6.0+lumad)/pow(3.0,mtric))*pow(dot(pow(abs(A-B),vec3(1.0/mtric)),dt),mtric)/(dot(A+B,dt)+lumad), floor_w, ceiling_w);
 }
 
 void main()
@@ -2152,21 +2156,38 @@ void main()
 static const char* const compositeCrtBloomSrc = R"GLSL(#version 330
 #define FRAGMENT
 // CRT phosphor bloom (custom, not from libretro).
-// Each RGB channel gets its own glow radius, and a P22-ish tint matrix bleeds
-// a little red glow into green (red -> slightly orange) and blue into green.
+// Vintage-CRT light diffusion, not a physical P22 simulation and no scanlines.
+//
+// 1. Glow source: chroma-weighted energy (the eye reads phosphor bleed mostly in
+//    saturated bright areas), computed on a soft-kernel blur that ignores
+//    transparent neighbours so empty background never glows.
+// 2. Halation instead of additive wash: each channel is blurred with its own
+//    radius (blue widest - real tubes smeared blue most), then recombined with a
+//    warm phosphor matrix. White areas contain all three channels equally, so
+//    their halo recombines to neutral gray and stays white instead of clipping.
+// 3. Tone shaping: the halo is compressed (x / (x + k)) so highlights roll off
+//    smoothly, then screened (not added) onto the image and finally graded
+//    through a filmic curve that lifts warm tones and gently tints shadows
+//    (vintage "warm" feel) without touching alpha.
 
-#define RME_BLOOM_STRENGTH 0.08
-#define RME_BLOOM_THRESHOLD 0.35
-#define RME_RADIUS_R 16.0
-#define RME_RADIUS_G 13.0
-#define RME_RADIUS_B 10.0
-#define RME_TINT_R_TO_G 0.20
-#define RME_TINT_B_TO_G 0.06
-#define RME_CENTER_WEIGHT 0.30
-#define RME_RING1_WEIGHT 0.55
-#define RME_RING2_WEIGHT 0.70
-#define RME_RING3_WEIGHT 0.55
-#define RME_WEIGHT_SUM (RME_CENTER_WEIGHT + 8.0 * (RME_RING1_WEIGHT + RME_RING2_WEIGHT + RME_RING3_WEIGHT))
+#define RME_GLOW_THRESHOLD 0.46
+#define RME_GLOW_SOFTNESS 0.38
+#define RME_STRENGTH 0.52
+#define RME_RADIUS_R 4.0
+#define RME_RADIUS_G 6.0
+#define RME_RADIUS_B 8.5
+#define TAPS 10
+
+// Phosphor-mix matrix (column-major). Red picks up a little green (orange feel),
+// blue keeps most of itself but feeds a touch into red, green stays neutral.
+#define RME_P22_R vec3(1.00, 0.14, 0.04)
+#define RME_P22_G vec3(0.06, 1.00, 0.10)
+#define RME_P22_B vec3(0.05, 0.16, 0.92)
+
+#define RME_GRADE_WARM 0.22
+#define RME_GRADE_COOL 0.10
+#define RME_GRADE_LIFT 0.018
+#define RME_GRADE_GAIN 0.965
 
 uniform sampler2D Texture;
 uniform vec2 TextureSize;
@@ -2177,48 +2198,92 @@ out vec4 FragColor;
 #define vTexCoord TEX0.xy
 #define SourceSize vec4(TextureSize, 1.0 / TextureSize)
 
-const vec2 RME_DIR[8] = vec2[8](
-	vec2( 1.0,  0.0), vec2(-1.0,  0.0),
-	vec2( 0.0,  1.0), vec2( 0.0, -1.0),
-	vec2( 0.70710678,  0.70710678), vec2(-0.70710678,  0.70710678),
-	vec2( 0.70710678, -0.70710678), vec2(-0.70710678, -0.70710678)
+const vec2 RME_DIR[TAPS] = vec2[TAPS](
+	vec2( 1.00,  0.00), vec2(-1.00,  0.00), vec2( 0.00,  1.00), vec2( 0.00, -1.00), vec2( 0.62,  0.62),
+	vec2(-0.62,  0.62), vec2( 0.62, -0.62), vec2(-0.62, -0.62), vec2( 0.38,  0.00), vec2( 0.00,  0.38)
 );
-const float RME_RING[3] = float[3](0.4, 0.7, 1.0);
-const float RME_RING_W[3] = float[3](RME_RING1_WEIGHT, RME_RING2_WEIGHT, RME_RING3_WEIGHT);
+const float RME_W[TAPS] = float[TAPS](1.00, 1.00, 1.00, 1.00, 0.80, 0.80, 0.80, 0.80, 0.62, 0.62);
+const float RME_RING[3] = float[3](0.45, 0.72, 1.0);
+const float RME_RING_W[3] = float[3](0.55, 0.78, 1.0);
+
+float rmeGlow(vec3 c)
+{
+	float l = max(max(c.r, c.g), c.b);
+	float chroma = l - min(min(c.r, c.g), c.b);
+	return smoothstep(RME_GLOW_THRESHOLD - RME_GLOW_SOFTNESS,
+		RME_GLOW_THRESHOLD + RME_GLOW_SOFTNESS,
+		l * (1.0 + 0.45 * chroma));
+}
 
 void main()
 {
 	vec4 base = texture(Source, vTexCoord);
+	vec3 c = base.rgb;
 
-	// Per-channel glow sampled on three rings so a wide spread reads as a soft
-	// halo instead of a hollow outline.
-	vec3 sum = base.rgb * RME_CENTER_WEIGHT;
-	for (int i = 0; i < 8; ++i) {
-		vec2 dir = RME_DIR[i];
-		vec2 offR = dir * (RME_RADIUS_R * SourceSize.zw);
-		vec2 offG = dir * (RME_RADIUS_G * SourceSize.zw);
-		vec2 offB = dir * (RME_RADIUS_B * SourceSize.zw);
+	// --- glow source ---------------------------------------------------------
+	// Weighted average around the pixel; transparent neighbours (alpha 0) are
+	// skipped so background does not contribute to the halo.
+	vec3 blurred = c * base.a;
+	float weight = base.a;
+	for (int i = 0; i < TAPS; ++i) {
+		vec2 o = RME_DIR[i] * SourceSize.zw;
+		vec4 tap = texture(Source, vTexCoord + o);
+		blurred += tap.rgb * tap.a;
+		weight += tap.a;
+	}
+	blurred /= max(weight, 1e-4);
+
+	float energy = rmeGlow(blurred);
+
+	// Scale the halo by how much glowing energy sits around this pixel, so dark
+	// pixels next to bright ones receive the bloom (light travels to them).
+	float spread = energy;
+
+	// --- per-channel halation -----------------------------------------------
+	// Sample AWAY from the pixel (negative offset): the halo at this pixel is
+	// built from the light arriving FROM its neighbours, so a bright sprite
+	// spreads light onto the darker pixels around it.
+	vec3 halo = vec3(0.0);
+	float haloW = 0.0;
+	for (int i = 0; i < TAPS; ++i) {
 		for (int j = 0; j < 3; ++j) {
 			float f = RME_RING[j];
-			float w = RME_RING_W[j];
-			sum.r += texture(Source, vTexCoord + offR * f).r * w;
-			sum.g += texture(Source, vTexCoord + offG * f).g * w;
-			sum.b += texture(Source, vTexCoord + offB * f).b * w;
+			float w = RME_RING_W[j] * RME_W[i];
+			vec2 oR = RME_DIR[i] * (RME_RADIUS_R * f * SourceSize.zw);
+			vec2 oG = RME_DIR[i] * (RME_RADIUS_G * f * SourceSize.zw);
+			vec2 oB = RME_DIR[i] * (RME_RADIUS_B * f * SourceSize.zw);
+			halo.r += texture(Source, vTexCoord - oR).r * w;
+			halo.g += texture(Source, vTexCoord - oG).g * w;
+			halo.b += texture(Source, vTexCoord - oB).b * w;
+			haloW += w;
 		}
 	}
-	sum /= RME_WEIGHT_SUM;
+	halo = halo / max(haloW, 1e-4);
 
-	// Threshold catches more of the mid-tones (lower = wider/brighter bloom).
-	sum = max(sum - RME_BLOOM_THRESHOLD, 0.0) / (1.0 - RME_BLOOM_THRESHOLD);
+	// --- phosphor recombination ----------------------------------------------
+	// The halo of a white pixel is white (all channels present), so this matrix
+	// only shifts saturated colors; whites stay white, no bleaching.
+	vec3 p22 = mat3(RME_P22_R, RME_P22_G, RME_P22_B) * halo;
 
-	// P22-ish phosphor tint (column-major): red bleeds into green, blue a touch.
-	vec3 bloom = mat3(
-		1.0,             RME_TINT_R_TO_G, 0.0,
-		0.0,             1.0,             RME_TINT_B_TO_G,
-		0.0,             0.0,             1.0
-	) * sum;
+	// --- tone shaping ---------------------------------------------------------
+	// Fade the halo as the pixel approaches white so bright areas bloom without
+	// clipping; whites keep their color and the glow reads as light spread.
+	float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+	float headroom = 1.0 - lum;
+	float outlineKeep = mix(0.20, 1.0, smoothstep(0.0, 0.30, lum));
+	vec3 shaped = p22 * (0.30 + 0.70 * headroom * headroom * headroom) * RME_STRENGTH * spread * outlineKeep;
 
-	FragColor = vec4(base.rgb + bloom * RME_BLOOM_STRENGTH, base.a);
+	// screen blend: out = 1-(1-a)(1-b), keeps whites from blowing out
+	vec3 outc = 1.0 - (1.0 - c) * (1.0 - shaped);
+
+	// --- vintage grade (subtle) -----------------------------------------------
+	float v = dot(outc, vec3(0.2126, 0.7152, 0.0722));
+	outc = mix(outc, vec3(v), 0.0);           // no-op anchor
+	outc.r += RME_GRADE_WARM * (1.0 - v) * outc.r;
+	outc.b -= RME_GRADE_COOL * (1.0 - v) * outc.b;
+	outc = outc * RME_GRADE_GAIN + RME_GRADE_LIFT;
+
+	FragColor = vec4(outc, base.a);
 }
 )GLSL";
 
