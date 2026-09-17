@@ -87,6 +87,23 @@ void BrushPalettePanel::OnKillFocus(wxFocusEvent &event) {
 void BrushPalettePanel::RemovePagination() {
 	pageInfoSizer->ShowItems(false);
 	pageInfoSizer->Clear();
+
+	if (nextPageButton) {
+		nextPageButton->Destroy();
+		nextPageButton = nullptr;
+	}
+	if (previousPageButton) {
+		previousPageButton->Destroy();
+		previousPageButton = nullptr;
+	}
+	if (currentPageCtrl) {
+		currentPageCtrl->Destroy();
+		currentPageCtrl = nullptr;
+	}
+	if (pageInfo) {
+		pageInfo->Destroy();
+		pageInfo = nullptr;
+	}
 }
 
 void BrushPalettePanel::AddPagination() {
@@ -169,7 +186,8 @@ void BrushPalettePanel::SetListType(BrushListType newListType) {
 
 	RemovePagination();
 
-	if (newListType == BRUSHLIST_SMALL_ICONS || newListType == BRUSHLIST_LARGE_ICONS) {
+	// Large icons are shown in a single scrollable grid, so they don't need pagination.
+	if (newListType == BRUSHLIST_SMALL_ICONS) {
 		AddPagination();
 	}
 
@@ -473,7 +491,7 @@ void BrushPanel::LoadContents() {
 	ASSERT(tileset != nullptr);
 	switch (listType) {
 		case BRUSHLIST_LARGE_ICONS:
-			brushbox = newd BrushIconBox(this, tileset, RENDER_SIZE_32x32);
+			brushbox = newd BrushIconBox(this, tileset, RENDER_SIZE_48x48, true);
 			break;
 		case BRUSHLIST_SMALL_ICONS:
 			brushbox = newd BrushIconBox(this, tileset, RENDER_SIZE_16x16);
@@ -557,13 +575,23 @@ BrushBoxInterface* BrushPanel::GetBrushBox() const {
 BEGIN_EVENT_TABLE(BrushIconBox, wxScrolledWindow)
 // Listbox style
 EVT_TOGGLEBUTTON(wxID_ANY, BrushIconBox::OnClickBrushButton)
+EVT_SIZE(BrushIconBox::OnSize)
 END_EVENT_TABLE()
 
-BrushIconBox::BrushIconBox(wxWindow* parent, const TilesetCategory* tileset, RenderSize rsz) :
+BrushIconBox::BrushIconBox(wxWindow* parent, const TilesetCategory* tileset, RenderSize rsz, bool scrollEnabled) :
 	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL),
 	BrushBoxInterface(tileset),
-	iconSize(rsz) {
+	iconSize(rsz),
+	scrollable(scrollEnabled) {
 	ASSERT(tileset->getType() >= TILESET_UNKNOWN && tileset->getType() <= TILESET_HOUSE);
+
+	if (scrollable) {
+		totalPages = 1;
+		SetScrollRate(0, 20);
+		LoadAllContents();
+		return;
+	}
+
 	width = iconSize == RENDER_SIZE_32x32 ? std::max(g_settings.getInteger(Config::PALETTE_COL_COUNT) / 2 + 1, 1) : std::max(g_settings.getInteger(Config::PALETTE_COL_COUNT) + 1, 1);
 	height = iconSize == RENDER_SIZE_32x32 ? std::max(g_settings.getInteger(Config::PALETTE_ROW_COUNT) / 2 + 1, 1) : std::max(g_settings.getInteger(Config::PALETTE_ROW_COUNT) + 1, 1);
 
@@ -577,9 +605,11 @@ BrushIconBox::BrushIconBox(wxWindow* parent, const TilesetCategory* tileset, Ren
 	LoadContentByPage();
 
 	const auto &brushPalettePanel = g_gui.GetParentWindowByType<BrushPalettePanel*>(this);
-	brushPalettePanel->SetPageInfo(wxString::Format("/%d", totalPages));
-	brushPalettePanel->EnableNextPage(totalPages > currentPage);
-	brushPalettePanel->EnablePreviousPage(currentPage > 1);
+	if (brushPalettePanel) {
+		brushPalettePanel->SetPageInfo(wxString::Format("/%d", totalPages));
+		brushPalettePanel->EnableNextPage(totalPages > currentPage);
+		brushPalettePanel->EnablePreviousPage(currentPage > 1);
+	}
 }
 
 bool BrushIconBox::LoadContentByPage(int page /* = 1 */) {
@@ -630,6 +660,86 @@ bool BrushIconBox::LoadContentByPage(int page /* = 1 */) {
 	return true;
 }
 
+bool BrushIconBox::LoadAllContents() {
+	if (stacksizer) {
+		stacksizer->ShowItems(false);
+		stacksizer->Clear();
+		stacksizer = nullptr;
+	}
+	if (gridSizer) {
+		gridSizer->ShowItems(false);
+		gridSizer->Clear();
+		gridSizer = nullptr;
+	}
+	rowsizers.clear();
+	brushButtons.clear();
+
+	brushButtons.reserve(tileset->brushlist.size());
+
+	stacksizer = newd wxBoxSizer(wxVERTICAL);
+	gridSizer = newd wxGridSizer(ComputeColumns(), 0, 0);
+
+	for (const auto brush : tileset->brushlist) {
+		const auto brushButton = newd BrushButton(this, brush, iconSize);
+		brushButtons.emplace_back(brushButton);
+		gridSizer->Add(brushButton);
+	}
+
+	// Anchor the grid at its natural size; the outer box keeps it from being
+	// stretched to fill the viewport height when there is no vertical scrollbar
+	// yet.
+	stacksizer->Add(gridSizer);
+	SetSizer(stacksizer);
+	stacksizer->Layout();
+
+	return true;
+}
+
+int BrushIconBox::ComputeColumns() const {
+	const auto clientWidth = GetClientSize().GetWidth();
+	return std::max(clientWidth / GetIconExtent(), 1);
+}
+
+int BrushIconBox::GetIconExtent() const {
+	switch (iconSize) {
+		case RENDER_SIZE_16x16:
+			return 20;
+		case RENDER_SIZE_48x48:
+			return 52;
+		case RENDER_SIZE_32x32:
+		default:
+			return 36;
+	}
+}
+
+wxSize BrushIconBox::DoGetBestClientSize() const {
+	if (scrollable) {
+		return wxSize(180, 240);
+	}
+	return wxScrolledWindow::DoGetBestClientSize();
+}
+
+void BrushIconBox::OnSize(wxSizeEvent &event) {
+	event.Skip();
+
+	if (!scrollable || gridSizer == nullptr) {
+		return;
+	}
+
+	const auto columns = ComputeColumns();
+	if (columns != gridSizer->GetCols()) {
+		gridSizer->SetCols(columns);
+	}
+
+	stacksizer->Layout();
+
+	const auto rows = static_cast<int>((brushButtons.size() + columns - 1) / columns);
+	SetVirtualSize(
+		std::max(GetClientSize().GetWidth(), columns * GetIconExtent()),
+		std::max(GetClientSize().GetHeight(), rows * GetIconExtent())
+	);
+}
+
 void BrushIconBox::SelectFirstBrush() {
 	if (tileset && tileset->size() > 0) {
 		Select(brushButtons[0]);
@@ -645,6 +755,19 @@ Brush* BrushIconBox::GetSelectedBrush() const {
 }
 
 bool BrushIconBox::SelectPaginatedBrush(const Brush* whatBrush, BrushPalettePanel* brushPalettePanel) {
+	if (scrollable) {
+		const auto it = std::ranges::find_if(brushButtons, [&](const auto &brushButton) {
+			return brushButton->brush == whatBrush;
+		});
+
+		if (it != brushButtons.end()) {
+			Select(*it);
+			return true;
+		}
+
+		return false;
+	}
+
 	const auto brushIt = std::ranges::find(tileset->brushlist.begin(), tileset->brushlist.end(), whatBrush);
 
 	if (brushIt != tileset->brushlist.end()) {
@@ -696,15 +819,15 @@ bool BrushIconBox::SelectBrush(const Brush* whatBrush) {
 }
 
 bool BrushIconBox::NextPage() {
-	return LoadContentByPage(currentPage + 1);
+	return !scrollable && LoadContentByPage(currentPage + 1);
 }
 
 bool BrushIconBox::SetPage(int page) {
-	return LoadContentByPage(page);
+	return !scrollable && LoadContentByPage(page);
 }
 
 bool BrushIconBox::PreviousPage() {
-	return LoadContentByPage(currentPage - 1);
+	return !scrollable && LoadContentByPage(currentPage - 1);
 }
 
 void BrushIconBox::Select(BrushButton* brushButton) {

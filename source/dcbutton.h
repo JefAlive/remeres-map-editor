@@ -30,7 +30,7 @@ enum {
 enum RenderSize {
 	RENDER_SIZE_16x16,
 	RENDER_SIZE_32x32,
-	RENDER_SIZE_64x64,
+	RENDER_SIZE_48x48,
 };
 
 class DCButton : public wxPanel {

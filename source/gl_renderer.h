@@ -54,7 +54,7 @@ public:
 	void destroyFBO();
 	void beginFBO();
 	void endFBO();
-	void blitFBO(float w, float h);
+	void blitFBO(float w, float h, float cellScale = 0.0f);
 	bool hasFBO() const {
 		return fboData.fbo != 0;
 	}
@@ -78,6 +78,16 @@ private:
 	GLint loc_projection = -1;
 	GLint loc_texture = -1;
 	GLint loc_stipple = -1;
+
+	// Smooth Retro post-process pass (scene upscale in screen space)
+	GLuint retroProgram = 0;
+	GLint retr_loc_projection = -1;
+	GLint retr_loc_texture = -1;
+	GLint retr_loc_texSize = -1;
+	GLint retr_loc_cellSize = -1;
+	GLuint retroVao = 0;
+	GLuint retroVbo = 0;
+	std::array<float, 16> projection {};
 
 	struct Vertex {
 		float x;

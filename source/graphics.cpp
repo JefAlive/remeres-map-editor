@@ -37,6 +37,8 @@
 
 #include <appearances.pb.h>
 
+#include <cmath>
+
 #ifndef GL_CLAMP_TO_EDGE
 	#define GL_CLAMP_TO_EDGE 0x812F
 #endif
@@ -1013,6 +1015,7 @@ void GraphicManager::garbageCollection() {
 EditorSprite::EditorSprite(wxBitmap* b16x16, wxBitmap* b32x32) {
 	bm[SPRITE_SIZE_16x16] = b16x16;
 	bm[SPRITE_SIZE_32x32] = b32x32;
+	bm[SPRITE_SIZE_48x48] = nullptr;
 }
 
 EditorSprite::~EditorSprite() {
@@ -1021,9 +1024,18 @@ EditorSprite::~EditorSprite() {
 
 void EditorSprite::DrawTo(wxDC* dc, SpriteSize sz, int start_x, int start_y, int width, int height) {
 	wxBitmap* sp = bm[sz];
-	if (sp) {
-		dc->DrawBitmap(*sp, start_x, start_y, true);
+	if (!sp) {
+		return;
 	}
+
+	if (width >= 0 && height >= 0 && (width != sp->GetWidth() || height != sp->GetHeight())) {
+		wxImage image = sp->ConvertToImage();
+		image.Rescale(width, height, wxIMAGE_QUALITY_HIGH);
+		dc->DrawBitmap(wxBitmap(image), start_x, start_y, true);
+		return;
+	}
+
+	dc->DrawBitmap(*sp, start_x, start_y, true);
 }
 
 void EditorSprite::unloadDC() {
@@ -1048,6 +1060,7 @@ GameSprite::GameSprite() :
 	minimap_color(0) {
 	m_wxMemoryDc[SPRITE_SIZE_16x16] = nullptr;
 	m_wxMemoryDc[SPRITE_SIZE_32x32] = nullptr;
+	m_wxMemoryDc[SPRITE_SIZE_48x48] = nullptr;
 }
 
 GameSprite::~GameSprite() {
@@ -1102,8 +1115,10 @@ uint8_t GameSprite::getHeight() {
 void GameSprite::unloadDC() {
 	delete m_wxMemoryDc[SPRITE_SIZE_16x16];
 	delete m_wxMemoryDc[SPRITE_SIZE_32x32];
+	delete m_wxMemoryDc[SPRITE_SIZE_48x48];
 	m_wxMemoryDc[SPRITE_SIZE_16x16] = nullptr;
 	m_wxMemoryDc[SPRITE_SIZE_32x32] = nullptr;
+	m_wxMemoryDc[SPRITE_SIZE_48x48] = nullptr;
 }
 
 uint8_t GameSprite::getMiniMapColor() const {
@@ -1178,8 +1193,139 @@ std::shared_ptr<GameSprite::OutfitImage> GameSprite::getOutfitImage(int spriteId
 	return img;
 }
 
+namespace {
+
+// Smooth Retro upscaler: keeps pixel cores crisp and only blends across cell
+// borders when the neighbouring pixels actually differ (edge-gated,
+// coverage-aware). Mirrors the map's GLSL Smooth Retro post-process pass so
+// palette previews and the map editor stay consistent. Mixes premultiplied
+// RGBA to avoid halos at alpha borders.
+wxImage smoothRetroScale(const wxImage &src, float scaleX, float scaleY) {
+	const int sw = src.GetWidth();
+	const int sh = src.GetHeight();
+	if (sw <= 0 || sh <= 0) {
+		return wxImage();
+	}
+
+	const int dw = std::max(1, static_cast<int>(std::lround(sw * scaleX)));
+	const int dh = std::max(1, static_cast<int>(std::lround(sh * scaleY)));
+
+	wxImage dst(dw, dh);
+	dst.InitAlpha();
+
+	const wxUint8 *srcData = src.GetData();
+	const wxUint8 *srcAlpha = src.GetAlpha();
+	wxUint8 *dstData = dst.GetData();
+	wxUint8 *dstAlpha = dst.GetAlpha();
+	if (!srcData || !dstData || !dstAlpha) {
+		return wxImage();
+	}
+
+	const float invSX = static_cast<float>(sw) / dw;
+	const float invSY = static_cast<float>(sh) / dh;
+
+	const int lx = sw - 1;
+	const int ly = sh - 1;
+
+	auto fetch = [&](int cx, int cy, float &r, float &g, float &b, float &aa) {
+		cx = std::clamp(cx, 0, lx);
+		cy = std::clamp(cy, 0, ly);
+		const int si = (cy * sw + cx) * 3;
+		const float a = srcAlpha ? srcAlpha[cy * sw + cx] / 255.0f : 1.0f;
+		r = srcData[si] * a / 255.0f;
+		g = srcData[si + 1] * a / 255.0f;
+		b = srcData[si + 2] * a / 255.0f;
+		aa = a;
+	};
+
+	auto lum = [](float r, float g, float b) -> float {
+		return 0.299f * r + 0.587f * g + 0.114f * b;
+	};
+
+	auto smoothstepC = [](float e0, float e1, float x) -> float {
+		const float t = std::clamp((x - e0) / std::max(e1 - e0, 1e-5f), 0.0f, 1.0f);
+		return t * t * (3.0f - 2.0f * t);
+	};
+
+	for (int y = 0; y < dh; ++y) {
+		const float srcY = (y + 0.5f) * invSY;
+		const int j0u = static_cast<int>(std::floor(srcY));
+		const float fy = srcY - j0u;
+		const int j0 = std::clamp(j0u, 0, ly);
+		const int j1 = std::min(j0 + 1, ly);
+
+		for (int x = 0; x < dw; ++x) {
+			const float srcX = (x + 0.5f) * invSX;
+			const int i0u = static_cast<int>(std::floor(srcX));
+			const float fx = srcX - i0u;
+			const int i0 = std::clamp(i0u, 0, lx);
+			const int i1 = std::min(i0 + 1, lx);
+
+			float c00r, c00g, c00b, c00a;
+			float c10r, c10g, c10b, c10a;
+			float c01r, c01g, c01b, c01a;
+			float c11r, c11g, c11b, c11a;
+			fetch(i0, j0, c00r, c00g, c00b, c00a);
+			fetch(i1, j0, c10r, c10g, c10b, c10a);
+			fetch(i0, j1, c01r, c01g, c01b, c01a);
+			fetch(i1, j1, c11r, c11g, c11b, c11a);
+
+			float lr, lg, lb, la;
+			float rr, rg, rb, ra;
+			float ur, ug, ub, ua;
+			float dr, dg, db, da;
+			fetch(i0 - 1, j0, lr, lg, lb, la);
+			fetch(i0 + 1, j0, rr, rg, rb, ra);
+			fetch(i0, j0 - 1, ur, ug, ub, ua);
+			fetch(i0, j0 + 1, dr, dg, db, da);
+
+			const float l00 = lum(c00r, c00g, c00b);
+			const float maxDiff = std::max({
+				std::fabs(l00 - lum(lr, lg, lb)),
+				std::fabs(l00 - lum(rr, rg, rb)),
+				std::fabs(l00 - lum(ur, ug, ub)),
+				std::fabs(l00 - lum(dr, dg, db)),
+			});
+			const float edgeGain = smoothstepC(0.02f, 0.12f, maxDiff);
+
+			const float interior = std::min(std::min(fx, 1.0f - fx), std::min(fy, 1.0f - fy));
+			// Blend only in the outer fringe of each cell so the apparent border
+			// stays glued to the pick grid (perceived edge = real grid line)
+			const float border = 1.0f - smoothstepC(0.30f, 0.50f, std::clamp(interior, 0.0f, 0.5f));
+			const float mixAmt = 0.6f * edgeGain * border;
+
+			// Coverage-based bilinear of the four surrounding cells (premultiplied)
+			const float bilR = c00r * (1.0f - fx) * (1.0f - fy) + c10r * fx * (1.0f - fy) + c01r * (1.0f - fx) * fy + c11r * fx * fy;
+			const float bilG = c00g * (1.0f - fx) * (1.0f - fy) + c10g * fx * (1.0f - fy) + c01g * (1.0f - fx) * fy + c11g * fx * fy;
+			const float bilB = c00b * (1.0f - fx) * (1.0f - fy) + c10b * fx * (1.0f - fy) + c01b * (1.0f - fx) * fy + c11b * fx * fy;
+			const float bilA = c00a * (1.0f - fx) * (1.0f - fy) + c10a * fx * (1.0f - fy) + c01a * (1.0f - fx) * fy + c11a * fx * fy;
+
+			const float outR = c00r + (bilR - c00r) * mixAmt;
+			const float outG = c00g + (bilG - c00g) * mixAmt;
+			const float outB = c00b + (bilB - c00b) * mixAmt;
+			const float outA = c00a + (bilA - c00a) * mixAmt;
+
+			const int di = (y * dw + x) * 3;
+			if (outA > 1e-4f) {
+				dstData[di] = static_cast<wxUint8>(std::clamp(static_cast<int>(std::lround(outR / outA * 255.0f)), 0, 255));
+				dstData[di + 1] = static_cast<wxUint8>(std::clamp(static_cast<int>(std::lround(outG / outA * 255.0f)), 0, 255));
+				dstData[di + 2] = static_cast<wxUint8>(std::clamp(static_cast<int>(std::lround(outB / outA * 255.0f)), 0, 255));
+			} else {
+				dstData[di] = 0;
+				dstData[di + 1] = 0;
+				dstData[di + 2] = 0;
+			}
+			dstAlpha[y * dw + x] = static_cast<wxUint8>(std::clamp(static_cast<int>(std::lround(outA * 255.0f)), 0, 255));
+		}
+	}
+
+	return dst;
+}
+
+} // namespace
+
 wxMemoryDC* GameSprite::getDC(SpriteSize spriteSize) {
-	ASSERT(spriteSize == SPRITE_SIZE_16x16 || spriteSize == SPRITE_SIZE_32x32);
+	ASSERT(spriteSize == SPRITE_SIZE_16x16 || spriteSize == SPRITE_SIZE_32x32 || spriteSize == SPRITE_SIZE_48x48);
 
 	if (!width && !height) {
 		// Initialize default draw offset
@@ -1207,7 +1353,19 @@ wxMemoryDC* GameSprite::getDC(SpriteSize spriteSize) {
 		}
 
 		// Create a bitmap with the sprite image
-		auto bitMap = wxBitmap(wxImage);
+		wxBitmap bitMap;
+
+		// Large previews upscale the source sprite with the Smooth Retro filter
+		// (crisp pixel cores, only borders blended where pixels differ)
+		if (spriteSize == SPRITE_SIZE_48x48 && wxImage.GetWidth() > 0 && wxImage.GetHeight() > 0) {
+			const float target = static_cast<float>(rme::SpritePixels * 3 / 2);
+			const float scaleX = target / static_cast<float>(wxImage.GetWidth());
+			const float scaleY = target / static_cast<float>(wxImage.GetHeight());
+			bitMap = wxBitmap(smoothRetroScale(wxImage, scaleX, scaleY));
+		} else {
+			bitMap = wxBitmap(wxImage);
+		}
+
 		m_wxMemoryDc[spriteSize]->SelectObject(bitMap);
 		g_gui.gfx.addSpriteToCleanup(this);
 	}

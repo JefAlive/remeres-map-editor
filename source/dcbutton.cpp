@@ -41,7 +41,7 @@ DCButton::DCButton() :
 }
 
 DCButton::DCButton(wxWindow* parent, wxWindowID id, wxPoint pos, int type, RenderSize sz, int sprite_id) :
-	wxPanel(parent, id, pos, (sz == RENDER_SIZE_64x64 ? wxSize(68, 68) : sz == RENDER_SIZE_32x32 ? wxSize(36, 36)
+	wxPanel(parent, id, pos, (sz == RENDER_SIZE_48x48 ? wxSize(52, 52) : sz == RENDER_SIZE_32x32 ? wxSize(36, 36)
 																								 : wxSize(20, 20))),
 	type(type),
 	state(false),
@@ -118,6 +118,9 @@ void DCButton::OnPaint(wxPaintEvent &event) {
 	} else if (size == RENDER_SIZE_32x32) {
 		size_x = 36;
 		size_y = 36;
+	} else if (size == RENDER_SIZE_48x48) {
+		size_x = 52;
+		size_y = 52;
 	}
 
 	pdc.SetBrush(*wxBLACK);
@@ -165,8 +168,13 @@ void DCButton::OnPaint(wxPaintEvent &event) {
 			if (overlay && type == DC_BTN_TOGGLE && GetValue()) {
 				overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2);
 			}
-		} else if (size == RENDER_SIZE_64x64) {
-			////
+		} else if (size == RENDER_SIZE_48x48) {
+			// Sprites are stored at 32x32, getDC scales them up to 48x48.
+			sprite->DrawTo(&pdc, SPRITE_SIZE_48x48, 2, 2, 48, 48);
+
+			if (overlay && type == DC_BTN_TOGGLE && GetValue()) {
+				overlay->DrawTo(&pdc, SPRITE_SIZE_32x32, 2, 2, 48, 48);
+			}
 		}
 	}
 }

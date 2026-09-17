@@ -112,7 +112,7 @@ public:
 
 class BrushIconBox : public wxScrolledWindow, public BrushBoxInterface {
 public:
-	BrushIconBox(wxWindow* parent, const TilesetCategory* tileset, RenderSize renderSize);
+	BrushIconBox(wxWindow* parent, const TilesetCategory* tileset, RenderSize renderSize, bool scrollable = false);
 	~BrushIconBox() = default;
 
 	wxWindow* GetSelfWindow() {
@@ -123,6 +123,11 @@ public:
 	void EnsureVisible(const BrushButton* brushButto);
 
 	bool LoadContentByPage(int page = 1);
+	bool LoadAllContents();
+
+	// The scrollable grid must not report its full content height as best size,
+	// otherwise Fit() would grow the palette to the whole tileset size.
+	wxSize DoGetBestClientSize() const override;
 
 	// Select the first brush
 	void SelectFirstBrush();
@@ -138,6 +143,7 @@ public:
 
 	// Event handling...
 	void OnClickBrushButton(wxCommandEvent &event);
+	void OnSize(wxSizeEvent &event);
 
 private:
 	// Used internally to select a button.
@@ -145,14 +151,19 @@ private:
 	// Used internally to deselect a button before selecting a new one.
 	void Deselect();
 
+	int ComputeColumns() const;
+	int GetIconExtent() const;
+
 	int width = 0;
 	int height = 0;
 
 	BrushButton* selectedButton = nullptr;
 	std::vector<BrushButton*> brushButtons;
 	RenderSize iconSize;
+	bool scrollable = false;
 
 	wxBoxSizer* stacksizer = nullptr;
+	wxGridSizer* gridSizer = nullptr;
 	std::vector<const wxBoxSizer*> rowsizers;
 
 	DECLARE_EVENT_TABLE();

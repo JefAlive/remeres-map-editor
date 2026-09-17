@@ -285,7 +285,12 @@ void MapDrawer::Draw() {
 	if (renderer->hasFBO()) {
 		float w = screensize_x * zoom;
 		float h = screensize_y * zoom;
-		renderer->blitFBO(w, h);
+		// The scene is drawn in map units (1 unit = 1 sprite/drawing pixel) and
+		// each unit spans (1 / zoom) screen pixels, so when zoomed in (zoom < 1)
+		// the Smooth Retro pass has magnification to work with; when zoomed out
+		// the cell scale stays below 1 and it falls back to nearest sampling.
+		float cellScale = 1.0f / zoom;
+		renderer->blitFBO(w, h, 0.0f); // DEBUG A/B: retro map pass disabled
 	}
 
 	DrawDraggingShadow();

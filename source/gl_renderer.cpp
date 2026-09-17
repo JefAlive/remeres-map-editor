@@ -85,6 +85,141 @@ void main() {
 }  
 )";
 
+static const char* const fragRetroSrc = R"(
+#version 330
+in vec2 vUV;
+in vec4 vColor;
+uniform sampler2D uTexture;
+uniform vec2 uTexSize;
+uniform float uCellSize;
+out vec4 FragColor;
+
+float rLum(vec3 c) {
+	return dot(c, vec3(0.299, 0.587, 0.114));
+}
+
+float rSmooth(float e0, float e1, float x) {
+	float t = clamp((x - e0) / max(e1 - e0, 1e-5), 0.0, 1.0);
+	return t * t * (3.0 - 2.0 * t);
+}
+
+void main() {
+	// No magnification: plain nearest sampling (same look as the plain FBO blit)
+	if (uCellSize < 1.0) {
+		FragColor = texture(uTexture, vUV) * vColor;
+		return;
+	}
+
+	ivec2 lim = ivec2(uTexSize) - 1;
+	vec2 p = gl_FragCoord.xy / uCellSize;
+	ivec2 c = ivec2(int(floor(p.x)), int(floor(p.y)));
+	vec2 f = p - vec2(c);
+
+	vec4 s00 = texelFetch(uTexture, clamp(c, ivec2(0, 0), lim), 0);
+	vec4 s10 = texelFetch(uTexture, clamp(c + ivec2(1, 0), ivec2(0, 0), lim), 0);
+	vec4 s01 = texelFetch(uTexture, clamp(c + ivec2(0, 1), ivec2(0, 0), lim), 0);
+	vec4 s11 = texelFetch(uTexture, clamp(c + ivec2(1, 1), ivec2(0, 0), lim), 0);
+	s00.rgb *= s00.a;
+	s10.rgb *= s10.a;
+	s01.rgb *= s01.a;
+	s11.rgb *= s11.a;
+
+	vec4 cL = texelFetch(uTexture, clamp(c + ivec2(-1, 0), ivec2(0, 0), lim), 0);
+	vec4 cR = texelFetch(uTexture, clamp(c + ivec2( 1, 0), ivec2(0, 0), lim), 0);
+	vec4 cU = texelFetch(uTexture, clamp(c + ivec2( 0, -1), ivec2(0, 0), lim), 0);
+	vec4 cD = texelFetch(uTexture, clamp(c + ivec2( 0, 1), ivec2(0, 0), lim), 0);
+	cL.rgb *= cL.a;
+	cR.rgb *= cR.a;
+	cU.rgb *= cU.a;
+	cD.rgb *= cD.a;
+
+	// Edge-gated blend: only soften borders where pixels actually differ
+	float l00 = rLum(s00.rgb);
+	float maxDiff = max(max(abs(l00 - rLum(cL.rgb)), abs(l00 - rLum(cR.rgb))),
+	                    max(abs(l00 - rLum(cU.rgb)), abs(l00 - rLum(cD.rgb))));
+	float edgeGain = rSmooth(0.02, 0.12, maxDiff);
+
+	// Blend only in the outer fringe of each cell so the apparent border stays
+	// glued to the pick grid (perceived edge = real grid line)
+	float interior = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+	float border = 1.0 - rSmooth(0.30, 0.50, clamp(interior, 0.0, 0.5));
+
+	float mixAmt = 0.6f * edgeGain * border;
+
+	vec4 bil = s00 * (1.0 - f.x) * (1.0 - f.y)
+	         + s10 * f.x * (1.0 - f.y)
+	         + s01 * (1.0 - f.x) * f.y
+	         + s11 * f.x * f.y;
+	vec4 outC = mix(s00, bil, mixAmt);
+	outC.rgb = outC.a > 1e-4 ? outC.rgb / outC.a : vec3(0.0);
+	FragColor = outC * vColor;
+}
+)";
+
+struct RetroVertex {
+	float x;
+	float y;
+	float u;
+	float v;
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
+	uint8_t a;
+};
+
+static GLuint rmeCompileProgram(const char* fragSrc) {
+	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vs, 1, &vertSrc, nullptr);
+	glCompileShader(vs);
+	{
+		GLint ok = 0;
+		glGetShaderiv(vs, GL_COMPILE_STATUS, &ok);
+		if (!ok) {
+			std::array<char, 512> log {};
+			glGetShaderInfoLog(vs, log.size(), nullptr, log.data());
+			wxLogError("GLRenderer::rmeCompileProgram — vertex shader compile error: %s", log.data());
+			glDeleteShader(vs);
+			return 0;
+		}
+	}
+
+	GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fs, 1, &fragSrc, nullptr);
+	glCompileShader(fs);
+	{
+		GLint ok = 0;
+		glGetShaderiv(fs, GL_COMPILE_STATUS, &ok);
+		if (!ok) {
+			std::array<char, 512> log {};
+			glGetShaderInfoLog(fs, log.size(), nullptr, log.data());
+			wxLogError("GLRenderer::rmeCompileProgram — fragment shader compile error: %s", log.data());
+			glDeleteShader(vs);
+			glDeleteShader(fs);
+			return 0;
+		}
+	}
+
+	GLuint prog = glCreateProgram();
+	glAttachShader(prog, vs);
+	glAttachShader(prog, fs);
+	glLinkProgram(prog);
+	{
+		GLint ok = 0;
+		glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+		if (!ok) {
+			std::array<char, 512> log {};
+			glGetProgramInfoLog(prog, log.size(), nullptr, log.data());
+			wxLogError("GLRenderer::rmeCompileProgram — program link error: %s", log.data());
+			glDeleteProgram(prog);
+			prog = 0;
+		}
+	}
+
+	glDeleteShader(vs);
+	glDeleteShader(fs);
+	return prog;
+}
+
 void GLRenderer::initFontAtlas() {
 	// Load TTF font
 	const float fontSize = 14.0f;
@@ -342,6 +477,14 @@ void GLRenderer::init() {
 	loc_texture = glGetUniformLocation(program, "uTexture");
 	loc_stipple = glGetUniformLocation(program, "uStipple");
 
+	retroProgram = rmeCompileProgram(fragRetroSrc);
+	if (retroProgram != 0) {
+		retr_loc_projection = glGetUniformLocation(retroProgram, "uProjection");
+		retr_loc_texture = glGetUniformLocation(retroProgram, "uTexture");
+		retr_loc_texSize = glGetUniformLocation(retroProgram, "uTexSize");
+		retr_loc_cellSize = glGetUniformLocation(retroProgram, "uCellSize");
+	}
+
 	glGenVertexArrays(1, &vao);
 	glGenBuffers(1, &vbo);
 	glGenBuffers(1, &ebo);
@@ -363,6 +506,22 @@ void GLRenderer::init() {
 
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	if (retroProgram != 0) {
+		glGenVertexArrays(1, &retroVao);
+		glGenBuffers(1, &retroVbo);
+		glBindVertexArray(retroVao);
+		glBindBuffer(GL_ARRAY_BUFFER, retroVbo);
+		glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(RetroVertex), nullptr, GL_DYNAMIC_DRAW);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(RetroVertex), (void*)offsetof(RetroVertex, x));
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(RetroVertex), (void*)offsetof(RetroVertex, u));
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(RetroVertex), (void*)offsetof(RetroVertex, r));
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+	}
 
 	initFontAtlas();
 
@@ -387,6 +546,18 @@ void GLRenderer::shutdown() {
 	if (program) {
 		glDeleteProgram(program);
 		program = 0;
+	}
+	if (retroProgram) {
+		glDeleteProgram(retroProgram);
+		retroProgram = 0;
+	}
+	if (retroVao) {
+		glDeleteVertexArrays(1, &retroVao);
+		retroVao = 0;
+	}
+	if (retroVbo) {
+		glDeleteBuffers(1, &retroVbo);
+		retroVbo = 0;
 	}
 	if (vbo) {
 		glDeleteBuffers(1, &vbo);
@@ -420,8 +591,14 @@ void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
 	m[13] = -(top + bottom) / (top - bottom);
 	m[15] = 1.0f;
 
+	projection = m;
+
 	glUseProgram(program);
 	glUniformMatrix4fv(loc_projection, 1, GL_FALSE, m.data());
+	if (retroProgram != 0) {
+		glUseProgram(retroProgram);
+		glUniformMatrix4fv(retr_loc_projection, 1, GL_FALSE, m.data());
+	}
 	glUseProgram(0);
 }
 
@@ -941,7 +1118,7 @@ void GLRenderer::endFBO() {
 	}
 }
 
-void GLRenderer::blitFBO(float w, float h) {
+void GLRenderer::blitFBO(float w, float h, float cellScale) {
 	if (fboData.fbo == 0) {
 		return;
 	}
@@ -949,6 +1126,40 @@ void GLRenderer::blitFBO(float w, float h) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
+
+	// Smooth Retro upscale: keep sprite-pixel cores crisp and only blend across
+	// cell borders, gated by the local colour difference. Mirrors the CPU filter
+	// used for the palette large previews.
+	if (cellScale >= 1.0f && retroProgram != 0) {
+		const RetroVertex verts[6] = {
+			{ 0.0f, 0.0f, 0.0f, 1.0f, 255, 255, 255, 255 },
+			{ w, 0.0f, 1.0f, 1.0f, 255, 255, 255, 255 },
+			{ w, h, 1.0f, 0.0f, 255, 255, 255, 255 },
+			{ 0.0f, 0.0f, 0.0f, 1.0f, 255, 255, 255, 255 },
+			{ w, h, 1.0f, 0.0f, 255, 255, 255, 255 },
+			{ 0.0f, h, 0.0f, 0.0f, 255, 255, 255, 255 },
+		};
+
+		glUseProgram(retroProgram);
+		glUniformMatrix4fv(retr_loc_projection, 1, GL_FALSE, projection.data());
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, fboData.texture);
+		glUniform1i(retr_loc_texture, 0);
+		glUniform2f(retr_loc_texSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
+		glUniform1f(retr_loc_cellSize, cellScale);
+
+		glBindVertexArray(retroVao);
+		glBindBuffer(GL_ARRAY_BUFFER, retroVbo);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_DYNAMIC_DRAW);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glUseProgram(0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		current_texture = 0;
+		return;
+	}
+
 	drawTexturedQuad(0, 0, w, h, fboData.texture, { 255, 255, 255, 255 }, 0.f, 1.f, 1.f, 0.f);
 	flush();
 }
