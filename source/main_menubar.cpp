@@ -764,6 +764,11 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SHOW_MOVEABLES, wxITEM_CHECK, OnChangeViewSettings);
 	MAKE_ACTION(SHOW_AVOIDABLES, wxITEM_CHECK, OnChangeViewSettings);
 
+	MAKE_ACTION(SCALE_FILTER_NONE, wxITEM_RADIO, OnChangeViewSettings);
+	MAKE_ACTION(SCALE_FILTER_RETRO, wxITEM_RADIO, OnChangeViewSettings);
+	MAKE_ACTION(SCALE_FILTER_2XSAI, wxITEM_RADIO, OnChangeViewSettings);
+	MAKE_ACTION(SCALE_FILTER_XBR, wxITEM_RADIO, OnChangeViewSettings);
+
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(WIN_ACTIONS_HISTORY, wxITEM_NORMAL, OnActionsHistoryWindow);
 	MAKE_ACTION(WIN_SQLITE_MATERIALS_INSPECTOR, wxITEM_NORMAL, OnSQLiteMaterialsInspector);
@@ -1100,6 +1105,20 @@ void MainMenuBar::LoadValues() {
 	CheckItem(SHOW_PICKUPABLES, g_settings.getBoolean(Config::SHOW_PICKUPABLES));
 	CheckItem(SHOW_MOVEABLES, g_settings.getBoolean(Config::SHOW_MOVEABLES));
 	CheckItem(SHOW_AVOIDABLES, g_settings.getBoolean(Config::SHOW_AVOIDABLES));
+	switch (g_settings.getInteger(Config::SCALE_FILTER)) {
+		case 0:
+			CheckItem(SCALE_FILTER_NONE, true);
+			break;
+		case 2:
+			CheckItem(SCALE_FILTER_2XSAI, true);
+			break;
+		case 3:
+			CheckItem(SCALE_FILTER_XBR, true);
+			break;
+		default:
+			CheckItem(SCALE_FILTER_RETRO, true);
+			break;
+	}
 }
 
 void MainMenuBar::LoadRecentFiles() {
@@ -3023,6 +3042,20 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent &event) {
 	g_settings.setInteger(Config::SHOW_PICKUPABLES, IsItemChecked(MenuBar::SHOW_PICKUPABLES));
 	g_settings.setInteger(Config::SHOW_MOVEABLES, IsItemChecked(MenuBar::SHOW_MOVEABLES));
 	g_settings.setInteger(Config::SHOW_AVOIDABLES, IsItemChecked(MenuBar::SHOW_AVOIDABLES));
+
+	// Scaling filter radios only switch the map view filter; palette previews
+	// are always rendered with 2xSaI (see GameSprite::getDC).
+	const int menuId = event.GetId();
+	const int menuBase = static_cast<int>(MAIN_FRAME_MENU);
+	if (menuId == menuBase + MenuBar::SCALE_FILTER_NONE) {
+		g_settings.setInteger(Config::SCALE_FILTER, 0);
+	} else if (menuId == menuBase + MenuBar::SCALE_FILTER_RETRO) {
+		g_settings.setInteger(Config::SCALE_FILTER, 1);
+	} else if (menuId == menuBase + MenuBar::SCALE_FILTER_2XSAI) {
+		g_settings.setInteger(Config::SCALE_FILTER, 2);
+	} else if (menuId == menuBase + MenuBar::SCALE_FILTER_XBR) {
+		g_settings.setInteger(Config::SCALE_FILTER, 3);
+	}
 
 	g_gui.RefreshView();
 	g_gui.root->GetAuiToolBar()->UpdateIndicators();

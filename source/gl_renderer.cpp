@@ -15,6 +15,7 @@
 #endif
 
 #include "main.h"
+#include "settings.h"
 #include "gl_renderer.h"
 #include <array>
 #include <cstring>
@@ -157,6 +158,287 @@ void main() {
 	vec4 outC = mix(s00, bil, mixAmt);
 	outC.rgb = outC.a > 1e-4 ? outC.rgb / outC.a : vec3(0.0);
 	FragColor = outC * vColor;
+}
+)";
+
+// Pixel-art scalers used when the map is zoomed in. Both operate on the FBO
+// scene rebuilt as logical sprite-pixels: each sprite pixel occupies `cs`
+// texels, so the neighbourhood is sampled at `base + offset * cs` and the
+// intra-pixel fraction picks the 2x2 (2xSaI) or xBR output pattern.
+// Ports: DOSBox render_templates_sai.h (_2xSaI) and Hyllian's xBR-lv2 shader.
+static const char* const fragPixelArtSrc = R"(
+#version 330
+in vec2 vUV;
+in vec4 vColor;
+uniform sampler2D uTexture;
+uniform vec2 uTexSize;
+uniform float uCellSize;
+uniform int uMode; // 1 = 2xSaI, 2 = xBR
+out vec4 FragColor;
+
+vec4 texS(ivec2 p) {
+	p = clamp(p, ivec2(0), ivec2(uTexSize) - ivec2(1));
+	return texelFetch(uTexture, p, 0);
+}
+
+vec3 colOf(ivec2 p) {
+	vec4 t = texS(p);
+	return t.a > (0.5 / 255.0) ? t.rgb : vec3(0.0);
+}
+
+bool eqv(vec3 a, vec3 b) {
+	return all(equal(a, b));
+}
+
+vec3 avg2(vec3 a, vec3 b) {
+	return (a + b) * 0.5;
+}
+
+vec3 avg4(vec3 a, vec3 b, vec3 c, vec3 d) {
+	return (a + b + c + d) * 0.25;
+}
+
+int getResult(vec3 A, vec3 B, vec3 C, vec3 D) {
+	bool ac = eqv(A, C);
+	bool bc = eqv(B, C);
+	bool ad = eqv(A, D);
+	bool bd = eqv(B, D);
+	int x = (ac ? 1 : 0) + (ad ? 1 : 0);
+	int y = (bc && !ac ? 1 : 0) + (bd && !ad ? 1 : 0);
+	// rmap[3][3] = { {0,0,-1},{0,0,-1},{1,1,0} }
+	return x == 2 ? (y == 2 ? 0 : -1) : (y == 2 ? 1 : 0);
+}
+
+vec3 saiScale(ivec2 base, int cs, vec2 f) {
+	vec3 C0 = colOf(base + ivec2(-cs, -cs));
+	vec3 C1 = colOf(base + ivec2(0, -cs));
+	vec3 C2 = colOf(base + ivec2(cs, -cs));
+	vec3 C3 = colOf(base + ivec2(-cs, 0));
+	vec3 C4 = colOf(base);
+	vec3 C5 = colOf(base + ivec2(cs, 0));
+	vec3 C6 = colOf(base + ivec2(-cs, cs));
+	vec3 C7 = colOf(base + ivec2(0, cs));
+	vec3 C8 = colOf(base + ivec2(cs, cs));
+	vec3 D0 = colOf(base + ivec2(-cs, 2 * cs));
+	vec3 D1 = colOf(base + ivec2(0, 2 * cs));
+	vec3 D2 = colOf(base + ivec2(cs, 2 * cs));
+	vec3 D3 = colOf(base + ivec2(2 * cs, -cs));
+	vec3 D4 = colOf(base + ivec2(2 * cs, 0));
+	vec3 D5 = colOf(base + ivec2(2 * cs, cs));
+
+	vec3 tl = C4;
+	vec3 tr;
+	vec3 bl;
+	vec3 br;
+	if (eqv(C4, C8) && !eqv(C5, C7)) {
+		if (((eqv(C4, C1) && eqv(C5, D5)) ||
+			(eqv(C4, C7) && eqv(C4, C2) && !eqv(C5, C1) && eqv(C5, D3)))) {
+			tr = C4;
+		} else {
+			tr = avg2(C4, C5);
+		}
+		if (((eqv(C4, C3) && eqv(C7, D2)) ||
+			(eqv(C4, C5) && eqv(C4, C6) && !eqv(C3, C7) && eqv(C7, D0)))) {
+			bl = C4;
+		} else {
+			bl = avg2(C4, C7);
+		}
+		br = C4;
+	} else if (eqv(C5, C7) && !eqv(C4, C8)) {
+		if (((eqv(C5, C2) && eqv(C4, C6)) ||
+			(eqv(C5, C1) && eqv(C5, C8) && !eqv(C4, C2) && eqv(C4, C0)))) {
+			tr = C5;
+		} else {
+			tr = avg2(C4, C5);
+		}
+		if (((eqv(C7, C6) && eqv(C4, C2)) ||
+			(eqv(C7, C3) && eqv(C7, C8) && !eqv(C4, C6) && eqv(C4, C0)))) {
+			bl = C7;
+		} else {
+			bl = avg2(C4, C7);
+		}
+		br = C5;
+	} else if (eqv(C4, C8) && eqv(C5, C7)) {
+		if (eqv(C4, C5)) {
+			tr = C4;
+			bl = C4;
+			br = C4;
+		} else {
+			int r = 0;
+			r += getResult(C4, C5, C3, C1);
+			r -= getResult(C5, C4, D4, C2);
+			r -= getResult(C5, C4, C6, D1);
+			r += getResult(C4, C5, D5, D2);
+			if (r > 0) {
+				br = C4;
+			} else if (r < 0) {
+				br = C5;
+			} else {
+				br = avg4(C4, C5, C7, C8);
+			}
+			bl = avg2(C4, C7);
+			tr = avg2(C4, C5);
+		}
+	} else {
+		br = avg4(C4, C5, C7, C8);
+		if ((eqv(C4, C7) && eqv(C4, C2) && !eqv(C5, C1) && eqv(C5, D3))) {
+			tr = C4;
+		} else if ((eqv(C5, C1) && eqv(C5, C8) && !eqv(C4, C2) && eqv(C4, C0))) {
+			tr = C5;
+		} else {
+			tr = avg2(C4, C5);
+		}
+		if ((eqv(C4, C5) && eqv(C4, C6) && !eqv(C3, C7) && eqv(C7, D0))) {
+			bl = C4;
+		} else if ((eqv(C7, C3) && eqv(C7, C8) && !eqv(C4, C6) && eqv(C4, C0))) {
+			bl = C7;
+		} else {
+			bl = avg2(C4, C7);
+		}
+	}
+	return f.x >= 0.5 ? (f.y >= 0.5 ? br : tr) : (f.y >= 0.5 ? bl : tl);
+}
+
+vec4 xbrDiff(vec4 a, vec4 b) {
+	return abs(a - b);
+}
+
+vec4 xbrEq(vec4 a, vec4 b) {
+	return step(xbrDiff(a, b), vec4(15.0));
+}
+
+vec4 xbrNeq(vec4 a, vec4 b) {
+	return vec4(1.0) - xbrEq(a, b);
+}
+
+vec4 xbrNotEqual(vec4 a, vec4 b) {
+	return vec4(notEqual(a, b));
+}
+
+vec4 xbrWd(vec4 a, vec4 b, vec4 c, vec4 d, vec4 e, vec4 f, vec4 g, vec4 h) {
+	return xbrDiff(a, b) + xbrDiff(a, c) + xbrDiff(d, e) + xbrDiff(d, f) + 4.0 * xbrDiff(g, h);
+}
+
+float xbrCdf(vec3 a, vec3 b) {
+	vec3 d = abs(a - b);
+	return d.r + d.g + d.b;
+}
+
+vec3 xbrScale(ivec2 base, int cs, vec2 fp) {
+	const vec3 rgbw = vec3(14.352, 28.176, 5.472);
+	float scl = clamp(float(cs), 1.0, 4.0);
+	vec4 delta = vec4(1.0 / scl);
+	vec4 delta_l = vec4(0.5 / scl, 1.0 / scl, 0.5 / scl, 1.0 / scl);
+	vec4 delta_u = delta_l.yxwz;
+
+	const vec4 Ao = vec4(1.0, -1.0, -1.0, 1.0);
+	const vec4 Bo = vec4(1.0, 1.0, -1.0, -1.0);
+	const vec4 Co = vec4(1.5, 0.5, -0.5, 0.5);
+	const vec4 Ax = vec4(1.0, -1.0, -1.0, 1.0);
+	const vec4 Bx = vec4(0.5, 2.0, -0.5, -2.0);
+	const vec4 Cx = vec4(1.0, 1.0, -0.5, 0.0);
+	const vec4 Ay = vec4(1.0, -1.0, -1.0, 1.0);
+	const vec4 By = vec4(2.0, 0.5, -2.0, -0.5);
+	const vec4 Cy = vec4(2.0, 0.0, -1.0, 0.5);
+	const vec4 Ci = vec4(0.25, 0.25, 0.25, 0.25);
+
+	vec3 a1 = colOf(base + ivec2(-cs, -2 * cs));
+	vec3 b1 = colOf(base + ivec2(0, -2 * cs));
+	vec3 c1 = colOf(base + ivec2(cs, -2 * cs));
+	vec3 a2 = colOf(base + ivec2(-cs, -cs));
+	vec3 b2 = colOf(base + ivec2(0, -cs));
+	vec3 c2 = colOf(base + ivec2(cs, -cs));
+	vec3 d2 = colOf(base + ivec2(-cs, 0));
+	vec3 e2 = colOf(base);
+	vec3 f2 = colOf(base + ivec2(cs, 0));
+	vec3 g2 = colOf(base + ivec2(-cs, cs));
+	vec3 h2 = colOf(base + ivec2(0, cs));
+	vec3 i2 = colOf(base + ivec2(cs, cs));
+	vec3 g5 = colOf(base + ivec2(-cs, 2 * cs));
+	vec3 h5 = colOf(base + ivec2(0, 2 * cs));
+	vec3 i5 = colOf(base + ivec2(cs, 2 * cs));
+	vec3 a0 = colOf(base + ivec2(-2 * cs, -cs));
+	vec3 d0 = colOf(base + ivec2(-2 * cs, 0));
+	vec3 g0 = colOf(base + ivec2(-2 * cs, cs));
+	vec3 c4 = colOf(base + ivec2(2 * cs, -cs));
+	vec3 f4 = colOf(base + ivec2(2 * cs, 0));
+	vec3 i4 = colOf(base + ivec2(2 * cs, cs));
+
+	vec4 bv = vec4(dot(b2, rgbw), dot(d2, rgbw), dot(h2, rgbw), dot(f2, rgbw));
+	vec4 cv = vec4(dot(c2, rgbw), dot(a2, rgbw), dot(g2, rgbw), dot(i2, rgbw));
+	vec4 dv = bv.yzwx;
+	vec4 ev = vec4(dot(e2, rgbw));
+	vec4 fv = bv.wxyz;
+	vec4 gv = cv.zwxy;
+	vec4 hv = bv.zwxy;
+	vec4 iv = cv.wxyz;
+
+	vec4 i4v = vec4(dot(i4, rgbw), dot(c1, rgbw), dot(a0, rgbw), dot(g5, rgbw));
+	vec4 i5v = vec4(dot(i5, rgbw), dot(c4, rgbw), dot(a1, rgbw), dot(g0, rgbw));
+	vec4 h5v = vec4(dot(h5, rgbw), dot(f4, rgbw), dot(b1, rgbw), dot(d0, rgbw));
+	vec4 f4v = vec4(dot(f4, rgbw));
+
+	vec4 fx = (Ao * fp.y + Bo * fp.x);
+	vec4 fx_l = (Ax * fp.y + Bx * fp.x);
+	vec4 fx_u = (Ay * fp.y + By * fp.x);
+
+	vec4 irlv0 = xbrNotEqual(ev, fv) * xbrNotEqual(ev, hv);
+	vec4 irlv1 = irlv0 * (
+		xbrNeq(fv, bv) * xbrNeq(fv, cv) +
+		xbrNeq(hv, dv) * xbrNeq(hv, gv) +
+		xbrEq(ev, iv) * (xbrNeq(fv, f4v) * xbrNeq(fv, i4v) + xbrNeq(hv, h5v) * xbrNeq(hv, i5v)) +
+		xbrEq(ev, gv) + xbrEq(ev, cv));
+	vec4 irlv2l = xbrNotEqual(ev, gv) * xbrNotEqual(dv, gv);
+	vec4 irlv2u = xbrNotEqual(ev, cv) * xbrNotEqual(bv, cv);
+
+	vec4 fx45i = clamp((fx + delta - Co - Ci) / (2.0 * delta), 0.0, 1.0);
+	vec4 fx45 = clamp((fx + delta - Co) / (2.0 * delta), 0.0, 1.0);
+	vec4 fx30 = clamp((fx_l + delta_l - Cx) / (2.0 * delta_l), 0.0, 1.0);
+	vec4 fx60 = clamp((fx_u + delta_u - Cy) / (2.0 * delta_u), 0.0, 1.0);
+
+	vec4 wd1 = xbrWd(ev, cv, gv, iv, h5v, f4v, hv, fv);
+	vec4 wd2 = xbrWd(hv, dv, i5v, fv, i4v, bv, ev, iv);
+
+	vec4 edri = step(wd1, wd2) * irlv0;
+	vec4 edr = step(wd1 + vec4(0.1), wd2) * step(vec4(0.5), irlv1);
+	vec4 edr_l = step(2.0 * xbrDiff(fv, gv), xbrDiff(hv, cv)) * irlv2l * edr;
+	vec4 edr_u = step(2.0 * xbrDiff(hv, cv), xbrDiff(fv, gv)) * irlv2u * edr;
+
+	fx45 = edr * fx45;
+	fx30 = edr_l * fx30;
+	fx60 = edr_u * fx60;
+	fx45i = edri * fx45i;
+
+	vec4 px = step(xbrDiff(ev, fv), xbrDiff(ev, hv));
+
+	vec4 maximos = max(max(fx30, fx60), max(fx45, fx45i));
+
+	vec3 res1 = e2;
+	res1 = mix(res1, mix(h2, f2, px.x), maximos.x);
+	res1 = mix(res1, mix(b2, d2, px.z), maximos.z);
+
+	vec3 res2 = e2;
+	res2 = mix(res2, mix(f2, b2, px.y), maximos.y);
+	res2 = mix(res2, mix(d2, h2, px.w), maximos.w);
+
+	return mix(res1, res2, step(xbrCdf(e2, res1), xbrCdf(e2, res2)));
+}
+
+void main() {
+	int cs = max(1, int(uCellSize + 0.5f));
+	if (cs < 2) {
+		FragColor = texture(uTexture, vUV) * vColor;
+		return;
+	}
+
+	vec2 p = gl_FragCoord.xy / float(cs);
+	ivec2 c = ivec2(int(floor(p.x)), int(floor(p.y)));
+	vec2 f = p - vec2(c);
+	ivec2 base = c * cs;
+
+	vec3 color = (uMode == 1) ? saiScale(base, cs, f) : xbrScale(base, cs, f);
+	float a = texS(base).a;
+	FragColor = vec4(color, a) * vColor;
 }
 )";
 
@@ -489,6 +771,15 @@ void GLRenderer::init() {
 		retr_loc_cellSize = glGetUniformLocation(retroProgram, "uCellSize");
 	}
 
+	scalProgram = rmeCompileProgram(fragPixelArtSrc);
+	if (scalProgram != 0) {
+		scal_loc_projection = glGetUniformLocation(scalProgram, "uProjection");
+		scal_loc_texture = glGetUniformLocation(scalProgram, "uTexture");
+		scal_loc_texSize = glGetUniformLocation(scalProgram, "uTexSize");
+		scal_loc_cellSize = glGetUniformLocation(scalProgram, "uCellSize");
+		scal_loc_mode = glGetUniformLocation(scalProgram, "uMode");
+	}
+
 	glGenVertexArrays(1, &vao);
 	glGenBuffers(1, &vbo);
 	glGenBuffers(1, &ebo);
@@ -555,6 +846,10 @@ void GLRenderer::shutdown() {
 		glDeleteProgram(retroProgram);
 		retroProgram = 0;
 	}
+	if (scalProgram) {
+		glDeleteProgram(scalProgram);
+		scalProgram = 0;
+	}
 	if (retroVao) {
 		glDeleteVertexArrays(1, &retroVao);
 		retroVao = 0;
@@ -602,6 +897,10 @@ void GLRenderer::setOrtho(float left, float right, float bottom, float top) {
 	if (retroProgram != 0) {
 		glUseProgram(retroProgram);
 		glUniformMatrix4fv(retr_loc_projection, 1, GL_FALSE, m.data());
+	}
+	if (scalProgram != 0) {
+		glUseProgram(scalProgram);
+		glUniformMatrix4fv(scal_loc_projection, 1, GL_FALSE, m.data());
 	}
 	glUseProgram(0);
 }
@@ -1131,10 +1430,19 @@ void GLRenderer::blitFBO(float w, float h, float cellScale) {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_BLEND);
 
-	// Smooth Retro upscale: keep sprite-pixel cores crisp and only blend across
-	// cell borders, gated by the local colour difference. Mirrors the CPU filter
-	// used for the palette large previews.
-	if (cellScale >= 1.0f && retroProgram != 0) {
+	// Spatial upscale: pick the legend-activated algorithm (see View -> Scaling
+	// Filter). 0 = nearest, 1 = Smooth Retro, 2 = 2xSaI, 3 = xBR (4x).
+	const int scaleFilter = g_settings.getInteger(Config::SCALE_FILTER);
+	GLuint useScaleProgram = 0;
+	int scaleMode = 0;
+	if (scaleFilter == 1 && retroProgram != 0) {
+		useScaleProgram = retroProgram;
+	} else if ((scaleFilter == 2 || scaleFilter == 3) && scalProgram != 0) {
+		useScaleProgram = scalProgram;
+		scaleMode = scaleFilter == 2 ? 1 : 2;
+	}
+
+	if (cellScale >= 1.0f && useScaleProgram != 0) {
 		const RetroVertex verts[6] = {
 			{ 0.0f, 0.0f, 0.0f, 1.0f, 255, 255, 255, 255 },
 			{ w, 0.0f, 1.0f, 1.0f, 255, 255, 255, 255 },
@@ -1144,13 +1452,21 @@ void GLRenderer::blitFBO(float w, float h, float cellScale) {
 			{ 0.0f, h, 0.0f, 0.0f, 255, 255, 255, 255 },
 		};
 
-		glUseProgram(retroProgram);
-		glUniformMatrix4fv(retr_loc_projection, 1, GL_FALSE, projection.data());
+		glUseProgram(useScaleProgram);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, fboData.texture);
-		glUniform1i(retr_loc_texture, 0);
-		glUniform2f(retr_loc_texSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
-		glUniform1f(retr_loc_cellSize, cellScale);
+		if (useScaleProgram == retroProgram) {
+			glUniformMatrix4fv(retr_loc_projection, 1, GL_FALSE, projection.data());
+			glUniform1i(retr_loc_texture, 0);
+			glUniform2f(retr_loc_texSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
+			glUniform1f(retr_loc_cellSize, cellScale);
+		} else {
+			glUniformMatrix4fv(scal_loc_projection, 1, GL_FALSE, projection.data());
+			glUniform1i(scal_loc_texture, 0);
+			glUniform2f(scal_loc_texSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
+			glUniform1f(scal_loc_cellSize, cellScale);
+			glUniform1i(scal_loc_mode, scaleMode);
+		}
 
 		glBindVertexArray(retroVao);
 		glBindBuffer(GL_ARRAY_BUFFER, retroVbo);

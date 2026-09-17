@@ -407,6 +407,7 @@ public:
 	void RebuildPalettes();
 	// Refresh only updates the content (such as house/waypoint list)
 	void RefreshPalettes(Map* m = nullptr, bool usedfault = true);
+
 	// Won't refresh the palette in the parameter
 	void RefreshOtherPalettes(PaletteWindow* p);
 	// If no palette is shown, this displays the primary palette

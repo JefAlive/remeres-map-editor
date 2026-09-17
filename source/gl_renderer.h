@@ -87,6 +87,14 @@ private:
 	GLint retr_loc_cellSize = -1;
 	GLuint retroVao = 0;
 	GLuint retroVbo = 0;
+
+	// Pixel-art scalers (2xSaI / xBR) post-process pass; reuses retroVao/Vbo
+	GLuint scalProgram = 0;
+	GLint scal_loc_projection = -1;
+	GLint scal_loc_texture = -1;
+	GLint scal_loc_texSize = -1;
+	GLint scal_loc_cellSize = -1;
+	GLint scal_loc_mode = -1;
 	std::array<float, 16> projection {};
 
 	struct Vertex {
