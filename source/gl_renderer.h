@@ -102,11 +102,12 @@ private:
 	GLint scal_loc_outputCellSize = -1;
 	std::array<float, 16> projection {};
 
-	// MDAPT + ScaleFX-Hybrid + sharpsmoother composite chain (SCALE_FILTER == 2).
-	// Passes 0-4 run MDAPT (native res), 5-9 run ScaleFX-Hybrid (last pass at 3x),
-	// pass 10 runs sharpsmoother as the final screen resolve.
-	static constexpr int COMPOSITE_PASS_COUNT = 11;
-	static constexpr int COMPOSITE_TARGET_COUNT = 6;
+	// MDAPT + ScaleFX-Hybrid + sharpsmoother + CRT bloom composite chain
+	// (SCALE_FILTER == 2). Passes 0-4 run MDAPT (native res), 5-9 run
+	// ScaleFX-Hybrid (last pass at 3x), 10 runs sharpsmoother into a screen-sized
+	// target and 11 runs the CRT phosphor bloom as the final screen resolve.
+	static constexpr int COMPOSITE_PASS_COUNT = 12;
+	static constexpr int COMPOSITE_TARGET_COUNT = 7;
 	struct CompositeProgram {
 		GLuint program = 0;
 		GLint loc_projection = -1;

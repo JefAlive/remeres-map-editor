@@ -221,7 +221,7 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_WALL_HOOKS, 0);
 	Int(SHOW_PICKUPABLES, 0);
 	Int(SHOW_MOVEABLES, 0);
-	Int(SCALE_FILTER, 1);
+	Int(SCALE_FILTER, 2);
 
 	section("Version");
 	Int(VERSION_ID, 0);

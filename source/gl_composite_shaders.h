@@ -2,6 +2,7 @@
 #define RME_GL_COMPOSITE_SHADERS_H_
 // Generated from libretro/glsl-shaders: MDAPT v2.8 (Sp00kyFox), ScaleFX-Hybrid (Sp00kyFox) and sharpsmoother (Sp00kyFox).
 // Each fragment shader shares a common vertex stage that emits TEX0/COL0.
+// Calibration (lower = less smoothing): SFX_RAA/SFX_CLR/`smoot` below.
 
 static const char* const compositeVertexSrc = R"GLSL(
 #version 330
@@ -743,10 +744,10 @@ uniform COMPAT_PRECISION float CB;
 uniform COMPAT_PRECISION float DEBUG;
 uniform COMPAT_PRECISION float linear_gamma;
 #else
-#define VL 0.0
-#define CB 1.0
+#define VL 0.00
+#define CB 1.00
 #define DEBUG 0.0
-#define linear_gamma 0.0
+#define linear_gamma 0.00
 #endif
 
 //#define TEX(dx,dy)   COMPAT_TEXTURE(Source, vTexCoord+vec2((dx),(dy))*SourceSize.zw)
@@ -917,8 +918,8 @@ THE SOFTWARE.
 #define COMPAT_ATTRIBUTE in
 #define COMPAT_TEXTURE texture
 #else
-#define COMPAT_VARYING varying 
-#define COMPAT_ATTRIBUTE attribute 
+#define COMPAT_VARYING varying
+#define COMPAT_ATTRIBUTE attribute
 #define COMPAT_TEXTURE texture2D
 #endif
 
@@ -1038,7 +1039,7 @@ void main()
 #endif
 	// output
 	FragColor = vec4(dist(E,A), dist(E,B), dist(E,C), dist(E,F));
-} 
+}
 #endif
 )GLSL";
 
@@ -1097,8 +1098,8 @@ THE SOFTWARE.
 #define COMPAT_ATTRIBUTE in
 #define COMPAT_TEXTURE texture
 #else
-#define COMPAT_VARYING varying 
-#define COMPAT_ATTRIBUTE attribute 
+#define COMPAT_VARYING varying
+#define COMPAT_ATTRIBUTE attribute
 #define COMPAT_TEXTURE texture2D
 #endif
 
@@ -1134,7 +1135,7 @@ void main()
 	COL0 = COLOR;
 	TEX0.xy = TexCoord.xy;
 	float dx = SourceSize.z, dy = SourceSize.w;
-    
+
 	t1 = TEX0.xxxy + vec4(  -dx,   0., dx,  -dy);	// A, B, C
 	t2 = TEX0.xxxy + vec4(  -dx,   0., dx,    0.);	// D, E, F
 	t3 = TEX0.xxxy + vec4(  -dx,   0., dx,   dy);	// G, H, I
@@ -1184,8 +1185,8 @@ COMPAT_VARYING vec4 TEX0;
 uniform COMPAT_PRECISION float SFX_CLR;
 uniform COMPAT_PRECISION float SFX_SAA;
 #else
-#define SFX_CLR 0.5
-#define SFX_SAA 1.0
+#define SFX_CLR 0.05
+#define SFX_SAA 0.00
 #endif
 
 // corner strength
@@ -1232,9 +1233,9 @@ void main()
 	res.y = str(F.x, vec2(E.w, E.y), vec2(B.w, F.y));
 	res.z = str(H.z, vec2(E.w, H.y), vec2(H.w, I.y));
 	res.w = str(H.x, vec2(D.w, H.y), vec2(G.w, G.y));
-		
+
 	FragColor = res;
-} 
+}
 #endif
 )GLSL";
 
@@ -1289,8 +1290,8 @@ THE SOFTWARE.
 #define COMPAT_ATTRIBUTE in
 #define COMPAT_TEXTURE texture
 #else
-#define COMPAT_VARYING varying 
-#define COMPAT_ATTRIBUTE attribute 
+#define COMPAT_VARYING varying
+#define COMPAT_ATTRIBUTE attribute
 #define COMPAT_TEXTURE texture2D
 #endif
 
@@ -1326,7 +1327,7 @@ void main()
     COL0 = COLOR;
     TEX0.xy = TexCoord.xy;
 	float dx = SourceSize.z, dy = SourceSize.w;
-	
+
 	t1 = TEX0.xxxy + vec4(  -dx,   0., dx,  -dy);	// A, B, C
 	t2 = TEX0.xxxy + vec4(  -dx,   0., dx,    0.);	// D, E, F
 	t3 = TEX0.xxxy + vec4(  -dx,   0., dx,   dy);	// G, H, I
@@ -1413,7 +1414,7 @@ void main()
 	vec4 A = TEXm(t1.xw), B = TEXm(t1.yw);
 	vec4 D = TEXm(t2.xw), E = TEXm(t2.yw), F = TEXm(t2.zw);
 	vec4 G = TEXm(t3.xw), H = TEXm(t3.yw), I = TEXm(t3.zw);
-	
+
 	// strength data
 	vec4 As = TEXs(t1.xw), Bs = TEXs(t1.yw), Cs = TEXs(t1.zw);
 	vec4 Ds = TEXs(t2.xw), Es = TEXs(t2.yw), Fs = TEXs(t2.zw);
@@ -1425,7 +1426,7 @@ void main()
 	// metric data
 	vec4 A = TEXm(-1,-1), B = TEXm( 0,-1);
 	vec4 D = TEXm(-1, 0), E = TEXm( 0, 0), F = TEXm( 1, 0);
-	vec4 G = TEXm(-1, 1), H = TEXm( 0, 1), I = TEXm( 1, 1);	
+	vec4 G = TEXm(-1, 1), H = TEXm( 0, 1), I = TEXm( 1, 1);
 
 	// strength data
 	vec4 As = TEXs(-1,-1), Bs = TEXs( 0,-1), Cs = TEXs( 1,-1);
@@ -1453,7 +1454,7 @@ void main()
 	res.x = min(jx.z + NOT(jx.y) * NOT(jx.w) * GE(jSx.z, 0.) * (jx.x + GE(jSx.x + jSx.z, jSx.y + jSx.w)), 1.);
 	res.y = min(jy.w + NOT(jy.z) * NOT(jy.x) * GE(jSy.w, 0.) * (jy.y + GE(jSy.y + jSy.w, jSy.x + jSy.z)), 1.);
 	res.z = min(jz.x + NOT(jz.w) * NOT(jz.y) * GE(jSz.x, 0.) * (jz.z + GE(jSz.x + jSz.z, jSz.y + jSz.w)), 1.);
-	res.w = min(jw.y + NOT(jw.x) * NOT(jw.z) * GE(jSw.y, 0.) * (jw.w + GE(jSw.y + jSw.w, jSw.x + jSw.z)), 1.);	
+	res.w = min(jw.y + NOT(jw.x) * NOT(jw.z) * GE(jSw.y, 0.) * (jw.w + GE(jSw.y + jSw.w, jSw.x + jSw.z)), 1.);
 
 
 	// single pixel & end of line detection
@@ -1476,7 +1477,7 @@ void main()
 	vec4 vert = GE(h, v) * clr;	// vertical edges
 
 	FragColor = (res + 2. * hori + 4. * vert + 8. * or) / 15.;
-} 
+}
 #endif
 )GLSL";
 
@@ -1535,8 +1536,8 @@ THE SOFTWARE.
 #define COMPAT_ATTRIBUTE in
 #define COMPAT_TEXTURE texture
 #else
-#define COMPAT_VARYING varying 
-#define COMPAT_ATTRIBUTE attribute 
+#define COMPAT_VARYING varying
+#define COMPAT_ATTRIBUTE attribute
 #define COMPAT_TEXTURE texture2D
 #endif
 
@@ -1573,7 +1574,7 @@ void main()
     COL0 = COLOR;
     TEX0.xy = TexCoord.xy;
 	float dx = SourceSize.z, dy = SourceSize.w;
-    
+
     t1 = TEX0.xxxy + vec4(-dx, -2.*dx, -3.*dx,     0.);	// D, D0, D1
 	t2 = TEX0.xxxy + vec4( dx,  2.*dx,  3.*dx,     0.);	// F, F0, F1
 	t3 = TEX0.xyyy + vec4(  0.,   -dy, -2.*dy, -3.*dy);	// B, B0, B1
@@ -1624,7 +1625,7 @@ COMPAT_VARYING vec4 TEX0;
 #ifdef PARAMETER_UNIFORM
 uniform COMPAT_PRECISION float SFX_SCN;
 #else
-#define SFX_SCN 1.0
+#define SFX_SCN 0.00
 #endif
 
 // extract first bool4 from float4 - corners
@@ -1655,7 +1656,7 @@ void main()
 	vec4 t3 = TEX0.xyyy + vec4(0., -rmeDy, -2.*rmeDy, -3.*rmeDy);
 	vec4 t4 = TEX0.xyyy + vec4(0., rmeDy, 2.*rmeDy, 3.*rmeDy);
 
-	/*	grid		corners		mids		
+	/*	grid		corners		mids
 
 		  B		x   y	  	  x
 		D E F				w   y
@@ -1687,7 +1688,7 @@ void main()
 	bvec4 Bc = loadCorn(B),	Bv = loadVert(B), Bo = loadOr(B), B0c = loadCorn(B0), B0v = loadVert(B0), B1v = loadVert(B1);
 	bvec4 Hc = loadCorn(H),	Hv = loadVert(H), Ho = loadOr(H), H0c = loadCorn(H0), H0v = loadVert(H0), H1v = loadVert(H1);
 
-	
+
 	// lvl1 corners (hori, vert)
 	bool lvl1x = Ec.x && (Dc.z || Bc.z || SFX_SCN == 1.);
 	bool lvl1y = Ec.y && (Fc.w || Bc.w || SFX_SCN == 1.);
@@ -1724,7 +1725,7 @@ void main()
 	bvec2 lvl6z = bvec2(lvl5z.x && (F1h.w && F1h.z), lvl5y.x && (H1v.y && H1v.z));
 	bvec2 lvl6w = bvec2(lvl5z.y && (D1h.z && D1h.w), lvl5w.x && (H1v.x && H1v.w));
 
-	
+
 	// subpixels - 0 = E, 1 = D, 2 = D0, 3 = F, 4 = F0, 5 = B, 6 = B0, 7 = H, 8 = H0
 
 	vec4 crn;
@@ -1742,7 +1743,7 @@ void main()
 
 	// ouput
 	FragColor = (crn + 9. * mid) / 80.;
-} 
+}
 #endif
 )GLSL";
 
@@ -1800,8 +1801,8 @@ THE SOFTWARE.
 #define COMPAT_ATTRIBUTE in
 #define COMPAT_TEXTURE texture
 #else
-#define COMPAT_VARYING varying 
-#define COMPAT_ATTRIBUTE attribute 
+#define COMPAT_VARYING varying
+#define COMPAT_ATTRIBUTE attribute
 #define COMPAT_TEXTURE texture2D
 #endif
 
@@ -1880,7 +1881,7 @@ COMPAT_VARYING vec4 TEX0;
 // All parameter floats need to have COMPAT_PRECISION in front of them
 uniform COMPAT_PRECISION float SFX_RAA;
 #else
-#define SFX_RAA 2.0
+#define SFX_RAA 0.10
 #endif
 
 // extract corners
@@ -1899,12 +1900,12 @@ vec3 res2x(vec3 pre2, vec3 pre1, vec3 px, vec3 pos1, vec3 pos2)
 	mat4x3 pre = mat4x3(pre2, pre1,   px, pos1);
 	mat4x3 pos = mat4x3(pre1,   px, pos1, pos2);
 	mat4x3  df = pos - pre;
-	
-	m = mix(px, 1.-px, step(px, vec3(0.5)));	
+
+	m = mix(px, 1.-px, step(px, vec3(0.5)));
 	m = SFX_RAA * min(m, min(abs(df[1]), abs(df[2])));
 	t = (7. * (df[1] + df[2]) - 3. * (df[0] + df[3])) / 16.;
 	t = clamp(t, -m, m);
-   
+
 	return t;
 }
 
@@ -1924,7 +1925,7 @@ void main()
 	// determine subpixel
 	vec2 fc = fract(vTexCoord * SourceSize.xy);
 	vec2 fp = floor(3.0 * fc);
-	
+
 	// check adjacent pixels to prevent artifacts
 	vec4 hn = COMPAT_TEXTURE(Source, vTexCoord + vec2(fp.x - 1., 0.) / SourceSize.xy);
 	vec4 vn = COMPAT_TEXTURE(Source, vTexCoord + vec2(0., fp.y - 1.) / SourceSize.xy);
@@ -1933,8 +1934,8 @@ void main()
 	vec4 crn = loadCrn(E), hc = loadCrn(hn), vc = loadCrn(vn);
 	vec4 mid = loadMid(E), hm = loadMid(hn), vm = loadMid(vn);
 
-	vec3 res = fp.y == 0. ? (fp.x == 0. ? vec3(crn.x, hc.y, vc.w) : fp.x == 1. ? vec3(mid.x, 0., vm.z) : vec3(crn.y, hc.x, vc.z)) : (fp.y == 1. ? (fp.x == 0. ? vec3(mid.w, hm.y, 0.) : fp.x == 1. ? vec3(0.) : vec3(mid.y, hm.w, 0.)) : (fp.x == 0. ? vec3(crn.w, hc.z, vc.x) : fp.x == 1. ? vec3(mid.z, 0., vm.x) : vec3(crn.z, hc.w, vc.y)));	
-	
+	vec3 res = fp.y == 0. ? (fp.x == 0. ? vec3(crn.x, hc.y, vc.w) : fp.x == 1. ? vec3(mid.x, 0., vm.z) : vec3(crn.y, hc.x, vc.z)) : (fp.y == 1. ? (fp.x == 0. ? vec3(mid.w, hm.y, 0.) : fp.x == 1. ? vec3(0.) : vec3(mid.y, hm.w, 0.)) : (fp.x == 0. ? vec3(crn.w, hc.z, vc.x) : fp.x == 1. ? vec3(mid.z, 0., vm.x) : vec3(crn.z, hc.w, vc.y)));
+
 
 #define TEX(x, y) textureOffset(Original, vTexCoord, ivec2(x, y)).rgb
 
@@ -1960,8 +1961,8 @@ void main()
 	vec3 raa = clamp(E0 + w.x*t1 + w.y*t2, a, b);
 
 	// hybrid output
-	FragColor = vec4((res.x != 0.) ? sfx : raa, 0.);	
-} 
+	FragColor = vec4((res.x != 0.) ? sfx : raa, 0.);
+}
 #endif
 )GLSL";
 
@@ -1970,7 +1971,7 @@ static const char* const compositeSharpsmootherSrc = R"GLSL(#version 330
 uniform sampler2D AlphaSource;
 /*
    Sharpsmoother shader
-   
+
    Copyright (C) 2005-2017 guest(r) - guest.r@gmail.com
 
    This program is free software; you can redistribute it and/or
@@ -2002,8 +2003,8 @@ uniform sampler2D AlphaSource;
 #define COMPAT_ATTRIBUTE in
 #define COMPAT_TEXTURE texture
 #else
-#define COMPAT_VARYING varying 
-#define COMPAT_ATTRIBUTE attribute 
+#define COMPAT_VARYING varying
+#define COMPAT_ATTRIBUTE attribute
 #define COMPAT_TEXTURE texture2D
 #endif
 
@@ -2022,7 +2023,7 @@ COMPAT_VARYING vec4 TEX0;
 
 
 
-vec4 _oPosition1; 
+vec4 _oPosition1;
 uniform mat4 MVPMatrix;
 uniform COMPAT_PRECISION int FrameDirection;
 uniform COMPAT_PRECISION int FrameCount;
@@ -2098,19 +2099,19 @@ uniform COMPAT_PRECISION float min_w;
 uniform COMPAT_PRECISION float smoot;
 uniform COMPAT_PRECISION float lumad;
 uniform COMPAT_PRECISION float mtric;
-#else 
-#define max_w    0.10
-#define min_w   -0.07
-#define smoot    0.55
-#define lumad    0.30
-#define mtric    0.70
+#else
+#define max_w 0.10
+#define min_w -0.02
+#define smoot 0.75
+#define lumad 0.30
+#define mtric 0.70
 #endif
 
 vec3 dt = vec3(1.0, 1.0, 1.0);
 
 
 float wt(vec3 A, vec3 B)
-{	
+{
 	return clamp(smoot - ((6.0+lumad)/pow(3.0,mtric))*pow(dot(pow(abs(A-B),vec3(1.0/mtric)),dt),mtric)/(dot(A+B,dt)+lumad), min_w, max_w);
 }
 
@@ -2124,16 +2125,16 @@ void main()
 	vec4 t3 = vec4(vTexCoord.xy + rmeDg1, vTexCoord.xy + rmeTy);
 	vec4 t4 = vec4(vTexCoord.xy + rmeDg2, vTexCoord.xy - rmeTx);
 
-   vec3 c00 = COMPAT_TEXTURE(Source, t1.xy).xyz; 
-   vec3 c10 = COMPAT_TEXTURE(Source, t1.zw).xyz; 
-   vec3 c20 = COMPAT_TEXTURE(Source, t2.xy).xyz; 
-   vec3 c01 = COMPAT_TEXTURE(Source, t4.zw).xyz; 
-   vec3 c11 = COMPAT_TEXTURE(Source, vTexCoord.xy).xyz; 
-   vec3 c21 = COMPAT_TEXTURE(Source, t2.zw).xyz; 
-   vec3 c02 = COMPAT_TEXTURE(Source, t4.xy).xyz; 
-   vec3 c12 = COMPAT_TEXTURE(Source, t3.zw).xyz; 
+   vec3 c00 = COMPAT_TEXTURE(Source, t1.xy).xyz;
+   vec3 c10 = COMPAT_TEXTURE(Source, t1.zw).xyz;
+   vec3 c20 = COMPAT_TEXTURE(Source, t2.xy).xyz;
+   vec3 c01 = COMPAT_TEXTURE(Source, t4.zw).xyz;
+   vec3 c11 = COMPAT_TEXTURE(Source, vTexCoord.xy).xyz;
+   vec3 c21 = COMPAT_TEXTURE(Source, t2.zw).xyz;
+   vec3 c02 = COMPAT_TEXTURE(Source, t4.xy).xyz;
+   vec3 c12 = COMPAT_TEXTURE(Source, t3.zw).xyz;
    vec3 c22 = COMPAT_TEXTURE(Source, t3.xy).xyz;
-       
+
    float w10 = wt(c11,c10);
    float w21 = wt(c11,c21);
    float w12 = wt(c11,c12);
@@ -2144,11 +2145,84 @@ void main()
    float w02 = wt(c11,c02)*0.75;
 
    FragColor = vec4(w10*c10+w21*c21+w12*c12+w01*c01+w00*c00+w22*c22+w20*c20+w02*c02+(1.0-w10-w21-w12-w01-w00-w22-w20-w02)*c11, texture(AlphaSource, vTexCoord).a);
-} 
+}
 #endif
 )GLSL";
 
-static const int compositePassCount = 11;
+static const char* const compositeCrtBloomSrc = R"GLSL(#version 330
+#define FRAGMENT
+// CRT phosphor bloom (custom, not from libretro).
+// Each RGB channel gets its own glow radius, and a P22-ish tint matrix bleeds
+// a little red glow into green (red -> slightly orange) and blue into green.
+
+#define RME_BLOOM_STRENGTH 0.08
+#define RME_BLOOM_THRESHOLD 0.35
+#define RME_RADIUS_R 16.0
+#define RME_RADIUS_G 13.0
+#define RME_RADIUS_B 10.0
+#define RME_TINT_R_TO_G 0.20
+#define RME_TINT_B_TO_G 0.06
+#define RME_CENTER_WEIGHT 0.30
+#define RME_RING1_WEIGHT 0.55
+#define RME_RING2_WEIGHT 0.70
+#define RME_RING3_WEIGHT 0.55
+#define RME_WEIGHT_SUM (RME_CENTER_WEIGHT + 8.0 * (RME_RING1_WEIGHT + RME_RING2_WEIGHT + RME_RING3_WEIGHT))
+
+uniform sampler2D Texture;
+uniform vec2 TextureSize;
+in vec4 TEX0;
+out vec4 FragColor;
+
+#define Source Texture
+#define vTexCoord TEX0.xy
+#define SourceSize vec4(TextureSize, 1.0 / TextureSize)
+
+const vec2 RME_DIR[8] = vec2[8](
+	vec2( 1.0,  0.0), vec2(-1.0,  0.0),
+	vec2( 0.0,  1.0), vec2( 0.0, -1.0),
+	vec2( 0.70710678,  0.70710678), vec2(-0.70710678,  0.70710678),
+	vec2( 0.70710678, -0.70710678), vec2(-0.70710678, -0.70710678)
+);
+const float RME_RING[3] = float[3](0.4, 0.7, 1.0);
+const float RME_RING_W[3] = float[3](RME_RING1_WEIGHT, RME_RING2_WEIGHT, RME_RING3_WEIGHT);
+
+void main()
+{
+	vec4 base = texture(Source, vTexCoord);
+
+	// Per-channel glow sampled on three rings so a wide spread reads as a soft
+	// halo instead of a hollow outline.
+	vec3 sum = base.rgb * RME_CENTER_WEIGHT;
+	for (int i = 0; i < 8; ++i) {
+		vec2 dir = RME_DIR[i];
+		vec2 offR = dir * (RME_RADIUS_R * SourceSize.zw);
+		vec2 offG = dir * (RME_RADIUS_G * SourceSize.zw);
+		vec2 offB = dir * (RME_RADIUS_B * SourceSize.zw);
+		for (int j = 0; j < 3; ++j) {
+			float f = RME_RING[j];
+			float w = RME_RING_W[j];
+			sum.r += texture(Source, vTexCoord + offR * f).r * w;
+			sum.g += texture(Source, vTexCoord + offG * f).g * w;
+			sum.b += texture(Source, vTexCoord + offB * f).b * w;
+		}
+	}
+	sum /= RME_WEIGHT_SUM;
+
+	// Threshold catches more of the mid-tones (lower = wider/brighter bloom).
+	sum = max(sum - RME_BLOOM_THRESHOLD, 0.0) / (1.0 - RME_BLOOM_THRESHOLD);
+
+	// P22-ish phosphor tint (column-major): red bleeds into green, blue a touch.
+	vec3 bloom = mat3(
+		1.0,             RME_TINT_R_TO_G, 0.0,
+		0.0,             1.0,             RME_TINT_B_TO_G,
+		0.0,             0.0,             1.0
+	) * sum;
+
+	FragColor = vec4(base.rgb + bloom * RME_BLOOM_STRENGTH, base.a);
+}
+)GLSL";
+
+static const int compositePassCount = 12;
 static const char* const compositePassSrc[compositePassCount] = {
 	compositeMdapt0Src,
 	compositeMdapt1Src,
@@ -2161,6 +2235,7 @@ static const char* const compositePassSrc[compositePassCount] = {
 	compositeScalefx3Src,
 	compositeScalefx4Src,
 	compositeSharpsmootherSrc,
+	compositeCrtBloomSrc,
 };
 
 #endif

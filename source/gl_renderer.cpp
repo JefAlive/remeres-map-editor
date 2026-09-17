@@ -1651,7 +1651,10 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 		ensureCompositeTarget(2, nativeW, nativeH, false, true);
 		ensureCompositeTarget(3, nativeW, nativeH, false, true);
 		ensureCompositeTarget(4, nativeW, nativeH, false, true);
-		ensureCompositeTarget(5, tripleW, tripleH, true, false);
+		// Nearest keeps the final 3x -> screen resolve crisp (no bilinear softening).
+		ensureCompositeTarget(5, tripleW, tripleH, false, false);
+		// Screen-sized target for the sharpsmoother resolve feeding the bloom.
+		ensureCompositeTarget(6, outputWidth, outputHeight, true, false);
 
 		for (int i = 0; i < COMPOSITE_TARGET_COUNT; ++i) {
 			if (compositeTargets[i].texture == 0) {
@@ -1679,15 +1682,19 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 		runCompositePass(7, t2, nativeW, nativeH, 0, t1, 0, 3, nativeW, nativeH, 0);
 		runCompositePass(8, t3, nativeW, nativeH, 0, 0, 0, 4, nativeW, nativeH, 0);
 		runCompositePass(9, t4, nativeW, nativeH, t0, 0, t0, 5, tripleW, tripleH, 0);
+
+		// sharpsmoother resolve into the screen-sized target, restoring the map
+		// alpha so the editor background shows through where the scene is
+		// transparent. Cached with the rest of the chain.
+		runCompositePass(10, compositeTargets[5].texture, tripleW, tripleH, 0, 0, 0, 6, outputWidth, outputHeight, fboData.texture);
 	}
 
-	if (compositeTargets[5].texture == 0) {
+	if (compositeTargets[6].texture == 0) {
 		return;
 	}
 
-	// sharpsmoother resolve to the screen, restoring the map alpha so the editor
-	// background shows through where the scene is transparent.
-	runCompositePass(10, compositeTargets[5].texture, tripleW, tripleH, 0, 0, 0, -1, outputWidth, outputHeight, fboData.texture);
+	// CRT phosphor bloom: per-channel glow with a P22-ish tint, to the screen.
+	runCompositePass(11, compositeTargets[6].texture, outputWidth, outputHeight, 0, 0, 0, -1, outputWidth, outputHeight, 0);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, outputWidth, outputHeight);

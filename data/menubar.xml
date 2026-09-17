@@ -137,7 +137,7 @@
             <item name="$Off (sharp pixels)" action="SCALE_FILTER_NONE" help="No smoothing; crisp pixels."/>
             <item name="Smooth $Retro" action="SCALE_FILTER_RETRO" help="Soft borders, crisp cores."/>
             <item name="$CRT Blend" action="SCALE_FILTER_2XSAI" help="Soft, analog-TV blending."/>
-            <item name="Smooth $Edges (xBRZ)" action="SCALE_FILTER_XBR" help="xBRZ 4x anti-aliasing."/>
+            <item name="Smooth $Edges" action="SCALE_FILTER_XBR" help="xBRZ 4x anti-aliasing."/>
         </menu>
         <separator/>
         <item name="$Show shade" hotkey="Q" action="SHOW_SHADE" help="Shade lower floors."/>
