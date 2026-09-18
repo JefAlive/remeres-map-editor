@@ -59,6 +59,7 @@ class FlagBrush;
 class MainFrame;
 class WelcomeDialog;
 class MapWindow;
+class LoadingBarCanvas;
 class MapCanvas;
 
 class SearchResultWindow;
@@ -196,6 +197,20 @@ public:
 	 */
 	void DestroyLoadBar();
 
+	// State of the in-canvas (ImGui) loading bar, read by LoadingBarCanvas.
+	bool IsLoadingBarActive() const {
+		return loadingBarActive;
+	}
+	bool IsLoadingBarCancelAllowed() const {
+		return loadingBarCanCancel;
+	}
+	const wxString &GetLoadingMessage() const {
+		return progressText;
+	}
+	int GetLoadingProgress() const {
+		return currentProgress < 0 ? 0 : currentProgress;
+	}
+
 	void UpdateMenubar();
 
 	bool IsRenderingEnabled() const {
@@ -219,6 +234,11 @@ protected:
 	void EnableRendering() {
 		--disabled_counter;
 	}
+
+	// Creates the footer canvas for the ImGui loading bar if needed.
+	void EnsureLoadingBarCanvas();
+	// Repaints the footer loading bar, if one is active.
+	void RefreshLoadingBar();
 
 public:
 	void SetTitle(wxString newtitle);
@@ -514,7 +534,9 @@ protected:
 	// Progress bar tracking
 	//=========================================================================
 	wxString progressText;
-	wxGenericProgressDialog* progressBar;
+	bool loadingBarActive;
+	bool loadingBarCanCancel;
+	LoadingBarCanvas* loadingBarCanvas;
 
 	int32_t progressFrom;
 	int32_t progressTo;

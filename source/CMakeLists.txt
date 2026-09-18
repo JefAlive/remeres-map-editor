@@ -10,6 +10,7 @@ endif()
 find_package(asio CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
 find_path(STB_INCLUDE_DIRS "stb_truetype.h")
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
@@ -177,7 +178,7 @@ endif()
 # === UNITY BUILD (compile time reducer) ===
 if(SPEED_UP_BUILD_UNITY)
   set_target_properties(${PROJECT_NAME} PROPERTIES UNITY_BUILD ON)
-  set_source_files_properties(gl_renderer.cpp
+  set_source_files_properties(gl_renderer.cpp gl_imgui_overlay.cpp
                               PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
   log_option_enabled("Build unity for speed up compilation")
 else()
@@ -223,6 +224,7 @@ target_sources(
           find_item_window.cpp
           filehandle.cpp
           graphics.cpp
+          gl_imgui_overlay.cpp
           gl_renderer.cpp
           ground_brush.cpp
           gui.cpp
@@ -242,6 +244,7 @@ target_sources(
           live_server.cpp
           live_socket.cpp
           live_tab.cpp
+          loading_bar_canvas.cpp
           lua/lua_engine.cpp
           lua/lua_script.cpp
           lua/lua_script_manager.cpp
@@ -338,11 +341,12 @@ target_include_directories(
 target_include_directories(${PROJECT_NAME} SYSTEM
                            PRIVATE ${fastnoiselite_SOURCE_DIR}/Cpp)
 
-target_link_libraries(
+  target_link_libraries(
   ${PROJECT_NAME}
   PRIVATE ${OPENGL_LIBRARIES}
           ZLIB::ZLIB
           glad::glad
+          imgui::imgui
           fmt::fmt
           asio::asio
           nlohmann_json::nlohmann_json

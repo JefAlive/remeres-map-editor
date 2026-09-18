@@ -6,6 +6,12 @@
     "cpr",
     "pugixml",
     "glad",
+    {
+      "name": "imgui",
+      "features": [
+        "opengl3-binding"
+      ]
+    },
     "nlohmann-json",
     "fmt",
     "wxwidgets",

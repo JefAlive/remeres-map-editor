@@ -37,6 +37,8 @@
 #include "minimap_window.h"
 #include "palette_window.h"
 #include "map_display.h"
+#include "loading_bar_canvas.h"
+#include "gl_imgui_overlay.h"
 #include "application.h"
 #include "welcome_dialog.h"
 #include "spawn_npc_brush.h"
@@ -105,7 +107,9 @@ GUI::GUI() :
 	npc_spawntime(0),
 	use_custom_thickness(false),
 	custom_thickness_mod(0.0),
-	progressBar(nullptr),
+	loadingBarActive(false),
+	loadingBarCanCancel(false),
+	loadingBarCanvas(nullptr),
 	disabled_counter(0) {
 	doodad_buffer_map = newd BaseMap();
 }
@@ -1123,17 +1127,56 @@ void GUI::CreateLoadBar(wxString message, bool canCancel /* = false */) {
 	CreateLoadBar(message, canCancel, true);
 }
 
+void GUI::EnsureLoadingBarCanvas() {
+	if (loadingBarCanvas || !root) {
+		return;
+	}
+
+	wxSize clientSize = root->GetClientSize();
+	int width = clientSize.GetWidth();
+	int height = clientSize.GetHeight();
+	if (width <= 0 || height <= 0) {
+		const wxSize frameSize = root->GetSize();
+		width = frameSize.GetWidth();
+		height = frameSize.GetHeight();
+	}
+	if (width <= 0) {
+		return;
+	}
+
+	const int barHeight = std::min(34, std::max(24, height));
+
+	loadingBarCanvas = newd LoadingBarCanvas(root);
+	loadingBarCanvas->SetSize(0, std::max(0, height - barHeight), width, barHeight);
+	loadingBarCanvas->Show(true);
+	loadingBarCanvas->Raise();
+
+	// Give the platform a chance to map the freshly created canvas before the
+	// (blocking) loading loop starts repainting it.
+	loadingBarCanvas->Update();
+	wxYieldIfNeeded();
+}
+
+void GUI::RefreshLoadingBar() {
+	if (!loadingBarCanvas) {
+		return;
+	}
+
+	loadingBarCanvas->Refresh(false);
+	loadingBarCanvas->Update();
+}
+
 void GUI::CreateLoadBar(wxString message, bool canCancel, bool appModal) {
+	(void)appModal;
 	progressText = message;
 
 	progressFrom = 0;
 	progressTo = 100;
-	currentProgress = -1;
+	currentProgress = 0;
 
-	const long style = (appModal ? wxPD_APP_MODAL : 0) | wxPD_SMOOTH | (canCancel ? wxPD_CAN_ABORT : 0);
-	progressBar = newd wxGenericProgressDialog("Loading", progressText + " (0%)", 100, root, style);
-	progressBar->SetSize(280, -1);
-	progressBar->Show(true);
+	loadingBarActive = true;
+	loadingBarCanCancel = canCancel;
+	ImGuiOverlay::resetCancelRequest();
 
 	for (int idx = 0; idx < tabbook->GetTabCount(); ++idx) {
 		auto* mt = dynamic_cast<MapTab*>(tabbook->GetTab(idx));
@@ -1141,7 +1184,9 @@ void GUI::CreateLoadBar(wxString message, bool canCancel, bool appModal) {
 			mt->GetEditor()->GetLiveServer()->startOperation(progressText);
 		}
 	}
-	progressBar->Update(0);
+
+	EnsureLoadingBarCanvas();
+	RefreshLoadingBar();
 }
 
 void GUI::SetLoadScale(int32_t from, int32_t to) {
@@ -1160,23 +1205,15 @@ bool GUI::SetLoadDone(int32_t done, const wxString &newMessage) {
 
 	bool messageChanged = !newMessage.empty() && newMessage != progressText;
 	if (newProgress == currentProgress && !messageChanged) {
-		return true;
+		return !ImGuiOverlay::isCancelRequested();
 	}
 
 	if (!newMessage.empty()) {
 		progressText = newMessage;
 	}
+	currentProgress = newProgress;
 
-	bool skip = false;
-	bool continueProcessing = true;
-	if (progressBar) {
-		continueProcessing = progressBar->Update(
-			newProgress,
-			wxString::Format("%s (%d%%)", progressText.c_str(), newProgress),
-			&skip
-		);
-		currentProgress = newProgress;
-	}
+	RefreshLoadingBar();
 
 	for (int32_t index = 0; index < tabbook->GetTabCount(); ++index) {
 		auto* mapTab = dynamic_cast<MapTab*>(tabbook->GetTab(index));
@@ -1188,21 +1225,26 @@ bool GUI::SetLoadDone(int32_t done, const wxString &newMessage) {
 		}
 	}
 
-	return continueProcessing && !skip;
+	return !ImGuiOverlay::isCancelRequested();
 }
 
 void GUI::DestroyLoadBar() {
-	if (progressBar) {
-		progressBar->Show(false);
-		currentProgress = -1;
+	loadingBarActive = false;
+	loadingBarCanCancel = false;
+	currentProgress = -1;
+	ImGuiOverlay::resetCancelRequest();
 
-		progressBar->Destroy();
-		progressBar = nullptr;
+	if (loadingBarCanvas) {
+		loadingBarCanvas->Show(false);
+		loadingBarCanvas->Destroy();
+		loadingBarCanvas = nullptr;
 
-		if (root->IsActive()) {
-			root->Raise();
-		} else {
-			root->RequestUserAttention();
+		if (root) {
+			if (root->IsActive()) {
+				root->Raise();
+			} else {
+				root->RequestUserAttention();
+			}
 		}
 	}
 }
