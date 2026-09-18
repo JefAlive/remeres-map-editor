@@ -145,11 +145,28 @@ public:
 	void OnClickBrushButton(wxCommandEvent &event);
 	void OnSize(wxSizeEvent &event);
 
+	// Virtual grid (scrollable / large-icons mode) event handling and painting.
+	void OnPaint(wxPaintEvent &event);
+	void OnLeftDown(wxMouseEvent &event);
+	void OnMotion(wxMouseEvent &event);
+	void OnKey(wxKeyEvent &event);
+
 private:
 	// Used internally to select a button.
 	void Select(BrushButton* brushButton);
 	// Used internally to deselect a button before selecting a new one.
 	void Deselect();
+
+	// Selects a brush by its index in the tileset (virtual grid).
+	void SelectIndex(int index);
+	// Scrolls the virtual grid so the given item index becomes visible.
+	void EnsureIndexVisible(int index);
+	// Recomputes the column count and virtual size for the current viewport.
+	void RecalculateVirtualSize();
+	// Returns the tileset index under the given client position, or -1.
+	int HitTestIndex(const wxPoint &clientPos) const;
+	// Draws a single tile of the virtual grid at an unscrolled position.
+	void DrawBrushTile(wxDC &dc, int index, int x, int y) const;
 
 	int ComputeColumns() const;
 	int GetIconExtent() const;
@@ -162,8 +179,14 @@ private:
 	RenderSize iconSize;
 	bool scrollable = false;
 
+	// Virtual grid state (scrollable mode only). Extra rows are drawn above and
+	// below the viewport so scrolling never exposes unrendered (white) rows.
+	static constexpr int OVERSCAN_ROWS = 2;
+	int columns = 0;
+	int selectedIndex = -1;
+	int hoveredIndex = -1;
+
 	wxBoxSizer* stacksizer = nullptr;
-	wxGridSizer* gridSizer = nullptr;
 	std::vector<const wxBoxSizer*> rowsizers;
 
 	DECLARE_EVENT_TABLE();

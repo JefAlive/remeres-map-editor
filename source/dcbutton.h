@@ -44,6 +44,10 @@ public:
 
 	void SetSprite(int id);
 
+	// Draws the bevelled button background/frame at the given position.
+	// Shared by DCButton and by virtualized custom-painted grids.
+	static void DrawButtonFrame(wxDC &dc, int x, int y, int size_x, int size_y, bool pressed);
+
 	void OnPaint(wxPaintEvent &);
 	void OnClick(wxMouseEvent &);
 

@@ -89,9 +89,7 @@ bool DCButton::GetValue() const {
 	return state;
 }
 
-void DCButton::OnPaint(wxPaintEvent &event) {
-	wxBufferedPaintDC pdc(this);
-
+void DCButton::DrawButtonFrame(wxDC &dc, int x, int y, int size_x, int size_y, bool pressed) {
 	static std::unique_ptr<wxPen> highlight_pen;
 	static std::unique_ptr<wxPen> dark_highlight_pen;
 	static std::unique_ptr<wxPen> light_shadow_pen;
@@ -110,6 +108,40 @@ void DCButton::OnPaint(wxPaintEvent &event) {
 		shadow_pen.reset(new wxPen(wxColor(0x40, 0x40, 0x40), 1, wxPENSTYLE_SOLID));
 	}
 
+	dc.SetBrush(*wxBLACK);
+	dc.DrawRectangle(x, y, size_x, size_y);
+	if (pressed) {
+		dc.SetPen(*shadow_pen);
+		dc.DrawLine(x, y, x + size_x - 1, y);
+		dc.DrawLine(x, y + 1, x, y + size_y - 1);
+		dc.SetPen(*light_shadow_pen);
+		dc.DrawLine(x + 1, y + 1, x + size_x - 2, y + 1);
+		dc.DrawLine(x + 1, y + 2, x + 1, y + size_y - 2);
+		dc.SetPen(*dark_highlight_pen);
+		dc.DrawLine(x + size_x - 2, y + 1, x + size_x - 2, y + size_y - 2);
+		dc.DrawLine(x + 1, y + size_y - 2, x + size_x - 1, y + size_y - 2);
+		dc.SetPen(*highlight_pen);
+		dc.DrawLine(x + size_x - 1, y, x + size_x - 1, y + size_y - 1);
+		dc.DrawLine(x, y + size_y - 1, x + size_y, y + size_y - 1);
+	} else {
+		dc.SetPen(*highlight_pen);
+		dc.DrawLine(x, y, x + size_x - 1, y);
+		dc.DrawLine(x, y + 1, x, y + size_y - 1);
+		dc.SetPen(*dark_highlight_pen);
+		dc.DrawLine(x + 1, y + 1, x + size_x - 2, y + 1);
+		dc.DrawLine(x + 1, y + 2, x + 1, y + size_y - 2);
+		dc.SetPen(*light_shadow_pen);
+		dc.DrawLine(x + size_x - 2, y + 1, x + size_x - 2, y + size_y - 2);
+		dc.DrawLine(x + 1, y + size_y - 2, x + size_x - 1, y + size_y - 2);
+		dc.SetPen(*shadow_pen);
+		dc.DrawLine(x + size_x - 1, y, x + size_x - 1, y + size_y - 1);
+		dc.DrawLine(x, y + size_y - 1, x + size_y, y + size_y - 1);
+	}
+}
+
+void DCButton::OnPaint(wxPaintEvent &event) {
+	wxBufferedPaintDC pdc(this);
+
 	int size_x = 20, size_y = 20;
 
 	if (size == RENDER_SIZE_16x16) {
@@ -123,35 +155,7 @@ void DCButton::OnPaint(wxPaintEvent &event) {
 		size_y = 52;
 	}
 
-	pdc.SetBrush(*wxBLACK);
-	pdc.DrawRectangle(0, 0, size_x, size_y);
-	if (type == DC_BTN_TOGGLE && GetValue()) {
-		pdc.SetPen(*shadow_pen);
-		pdc.DrawLine(0, 0, size_x - 1, 0);
-		pdc.DrawLine(0, 1, 0, size_y - 1);
-		pdc.SetPen(*light_shadow_pen);
-		pdc.DrawLine(1, 1, size_x - 2, 1);
-		pdc.DrawLine(1, 2, 1, size_y - 2);
-		pdc.SetPen(*dark_highlight_pen);
-		pdc.DrawLine(size_x - 2, 1, size_x - 2, size_y - 2);
-		pdc.DrawLine(1, size_y - 2, size_x - 1, size_y - 2);
-		pdc.SetPen(*highlight_pen);
-		pdc.DrawLine(size_x - 1, 0, size_x - 1, size_y - 1);
-		pdc.DrawLine(0, size_y - 1, size_y, size_y - 1);
-	} else {
-		pdc.SetPen(*highlight_pen);
-		pdc.DrawLine(0, 0, size_x - 1, 0);
-		pdc.DrawLine(0, 1, 0, size_y - 1);
-		pdc.SetPen(*dark_highlight_pen);
-		pdc.DrawLine(1, 1, size_x - 2, 1);
-		pdc.DrawLine(1, 2, 1, size_y - 2);
-		pdc.SetPen(*light_shadow_pen);
-		pdc.DrawLine(size_x - 2, 1, size_x - 2, size_y - 2);
-		pdc.DrawLine(1, size_y - 2, size_x - 1, size_y - 2);
-		pdc.SetPen(*shadow_pen);
-		pdc.DrawLine(size_x - 1, 0, size_x - 1, size_y - 1);
-		pdc.DrawLine(0, size_y - 1, size_y, size_y - 1);
-	}
+	DrawButtonFrame(pdc, 0, 0, size_x, size_y, type == DC_BTN_TOGGLE && GetValue());
 
 	if (sprite) {
 		if (size == RENDER_SIZE_16x16) {
