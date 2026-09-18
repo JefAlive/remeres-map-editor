@@ -130,9 +130,8 @@ private:
 	static constexpr int COMPOSITE_TARGET_THRESHOLD = 12;
 	static constexpr int COMPOSITE_TARGET_BLUR_H = 13;
 	static constexpr int COMPOSITE_TARGET_BLUR_V = 14;
-	// CAS sharpness knob: 0.0 is the least ringing, 1.0 the maximum ringing. Kept
-	// low (AMD default range) so the 2x sharpen never produces white halos.
-	static constexpr float COMPOSITE_CAS_SHARPNESS = 0.25f;
+	// CAS sharpness knob: 0.0 is the least ringing, 1.0 the maximum ringing.
+	static constexpr float COMPOSITE_CAS_SHARPNESS = 0.35f;
 	struct CompositeProgram {
 		GLuint program = 0;
 		GLint loc_projection = -1;
