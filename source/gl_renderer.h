@@ -102,12 +102,30 @@ private:
 	GLint scal_loc_outputCellSize = -1;
 	std::array<float, 16> projection {};
 
-	// MDAPT + ScaleFX-Hybrid + sharpsmoother + CRT bloom composite chain
-	// (SCALE_FILTER == 2). Passes 0-4 run MDAPT (native res), 5-9 run
-	// ScaleFX-Hybrid (last pass at 3x), 10 runs sharpsmoother into a screen-sized
-	// target and 11 runs the CRT phosphor bloom as the final screen resolve.
-	static constexpr int COMPOSITE_PASS_COUNT = 12;
-	static constexpr int COMPOSITE_TARGET_COUNT = 7;
+	// "CRT Blend" composite chain (SCALE_FILTER == 2):
+	//   passes 0-4  MDAPT v2.8 checkerboard de-dither, native resolution.
+	//   pass  5     Super 2xSaI, re-run as many 2x steps as needed to cover the
+	//               output (2^steps, capped by GL_MAX_TEXTURE_SIZE).
+	//   pass  6     nearest downscale of the 2^steps image to the output size.
+	//   pass  7     crt-hyllian-glow source threshold (quarter res).
+	//   pass  8/9   separable glow blur (quarter res).
+	//   pass  10    glow resolve (P22 halation + gamma) to the screen.
+	static constexpr int COMPOSITE_PASS_COUNT = 11;
+	// Targets 0-3 are the MDAPT ping-pong buffers, 4..(4+steps-1) the Super 2xSaI
+	// steps, then sharp/threshold/blur-H/blur-V.
+	static constexpr int COMPOSITE_TARGET_COUNT = 16;
+	static constexpr int COMPOSITE_MAX_SCALE_STEPS = 6;
+	static constexpr int COMPOSITE_PASS_SCALE = 5;
+	static constexpr int COMPOSITE_PASS_DOWNSCALE = 6;
+	static constexpr int COMPOSITE_PASS_THRESHOLD = 7;
+	static constexpr int COMPOSITE_PASS_BLUR_H = 8;
+	static constexpr int COMPOSITE_PASS_BLUR_V = 9;
+	static constexpr int COMPOSITE_PASS_RESOLVE = 10;
+	static constexpr int COMPOSITE_TARGET_SCALE_BASE = 4;
+	static constexpr int COMPOSITE_TARGET_SHARP = 10;
+	static constexpr int COMPOSITE_TARGET_THRESHOLD = 11;
+	static constexpr int COMPOSITE_TARGET_BLUR_H = 12;
+	static constexpr int COMPOSITE_TARGET_BLUR_V = 13;
 	struct CompositeProgram {
 		GLuint program = 0;
 		GLint loc_projection = -1;
@@ -132,6 +150,12 @@ private:
 	GLuint compositeFbo = 0;
 	GLuint compositeVao = 0;
 	GLuint compositeVbo = 0;
+	// Cached dimensions of the last built composite chain, so the expensive
+	// upscale/glow passes only re-run when the scene or the output size changes.
+	bool compositeCacheValid = false;
+	int compositeCacheW = 0;
+	int compositeCacheH = 0;
+	int compositeCacheSteps = 0;
 	void ensureCompositeTarget(int index, int w, int h, bool linear, bool highPrecision);
 	void destroyCompositeTargets();
 	void runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX = 1.0f, float sourceScaleY = 1.0f);

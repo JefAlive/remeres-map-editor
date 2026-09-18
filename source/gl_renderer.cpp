@@ -818,7 +818,17 @@ void GLRenderer::init() {
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
-	if (compositePrograms[0].program != 0 && compositePrograms[COMPOSITE_PASS_COUNT - 1].program != 0) {
+	// The composite chain is only usable as a whole: a partially compiled chain
+	// would render garbage, so require every pass and fall back to the nearest
+	// blit otherwise.
+	bool compositeReady = true;
+	for (int i = 0; i < COMPOSITE_PASS_COUNT; ++i) {
+		if (compositePrograms[i].program == 0) {
+			compositeReady = false;
+			break;
+		}
+	}
+	if (compositeReady) {
 		glGenFramebuffers(1, &compositeFbo);
 		glGenVertexArrays(1, &compositeVao);
 		glGenBuffers(1, &compositeVbo);
@@ -1545,6 +1555,10 @@ void GLRenderer::destroyCompositeTargets() {
 		}
 		t = CompositeTarget {};
 	}
+	compositeCacheValid = false;
+	compositeCacheW = 0;
+	compositeCacheH = 0;
+	compositeCacheSteps = 0;
 }
 
 void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX, float sourceScaleY) {
@@ -1634,30 +1648,74 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 	if (fboData.fbo == 0 || !hasComposite()) {
 		return;
 	}
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0, 0, outputWidth, outputHeight);
-	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	if (outputWidth <= 0 || outputHeight <= 0) {
+		return;
+	}
 
 	const int nativeW = fboData.width;
 	const int nativeH = fboData.height;
-	const int tripleW = nativeW * 3;
-	const int tripleH = nativeH * 3;
+	if (nativeW <= 0 || nativeH <= 0) {
+		return;
+	}
 
-	if (rebuild || compositeTargets[5].texture == 0) {
+	GLint maxTextureSize = 0;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+
+	// Smallest Super 2xSaI chain (2^steps) that covers the output, capped by
+	// GL_MAX_TEXTURE_SIZE. At least one 2x pass always runs so the blend applies
+	// at every zoom level.
+	int steps = 1;
+	int scaledW = nativeW * 2;
+	int scaledH = nativeH * 2;
+	while ((scaledW < outputWidth || scaledH < outputHeight) && steps < COMPOSITE_MAX_SCALE_STEPS) {
+		const int nextW = scaledW * 2;
+		const int nextH = scaledH * 2;
+		if (maxTextureSize > 0 && (nextW > maxTextureSize || nextH > maxTextureSize)) {
+			break;
+		}
+		scaledW = nextW;
+		scaledH = nextH;
+		++steps;
+	}
+
+	const int quarterW = std::max(1, outputWidth / 4);
+	const int quarterH = std::max(1, outputHeight / 4);
+
+	const bool sizeChanged = !compositeCacheValid
+		|| compositeCacheW != outputWidth
+		|| compositeCacheH != outputHeight
+		|| compositeCacheSteps != steps;
+
+	if (rebuild || sizeChanged) {
 		ensureCompositeTarget(0, nativeW, nativeH, false, true);
 		ensureCompositeTarget(1, nativeW, nativeH, false, true);
 		ensureCompositeTarget(2, nativeW, nativeH, false, true);
 		ensureCompositeTarget(3, nativeW, nativeH, false, true);
-		ensureCompositeTarget(4, nativeW, nativeH, false, true);
-		// Nearest keeps the final 3x -> screen resolve crisp (no bilinear softening).
-		ensureCompositeTarget(5, tripleW, tripleH, false, false);
-		// Screen-sized target for the sharpsmoother resolve feeding the bloom.
-		ensureCompositeTarget(6, outputWidth, outputHeight, true, false);
 
-		for (int i = 0; i < COMPOSITE_TARGET_COUNT; ++i) {
-			if (compositeTargets[i].texture == 0) {
+		int stepW = nativeW;
+		int stepH = nativeH;
+		for (int i = 0; i < steps; ++i) {
+			stepW *= 2;
+			stepH *= 2;
+			ensureCompositeTarget(COMPOSITE_TARGET_SCALE_BASE + i, stepW, stepH, false, false);
+		}
+		// Nearest on the scale textures keeps the Super 2xSaI -> output resolve crisp.
+		ensureCompositeTarget(COMPOSITE_TARGET_SHARP, outputWidth, outputHeight, true, false);
+		ensureCompositeTarget(COMPOSITE_TARGET_THRESHOLD, quarterW, quarterH, true, false);
+		ensureCompositeTarget(COMPOSITE_TARGET_BLUR_H, quarterW, quarterH, true, false);
+		ensureCompositeTarget(COMPOSITE_TARGET_BLUR_V, quarterW, quarterH, true, false);
+
+		if (compositeTargets[0].texture == 0
+			|| compositeTargets[COMPOSITE_TARGET_SHARP].texture == 0
+			|| compositeTargets[COMPOSITE_TARGET_THRESHOLD].texture == 0
+			|| compositeTargets[COMPOSITE_TARGET_BLUR_H].texture == 0
+			|| compositeTargets[COMPOSITE_TARGET_BLUR_V].texture == 0) {
+			compositeCacheValid = false;
+			return;
+		}
+		for (int i = 0; i < steps; ++i) {
+			if (compositeTargets[COMPOSITE_TARGET_SCALE_BASE + i].texture == 0) {
+				compositeCacheValid = false;
 				return;
 			}
 		}
@@ -1667,7 +1725,6 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 		const GLuint t1 = compositeTargets[1].texture;
 		const GLuint t2 = compositeTargets[2].texture;
 		const GLuint t3 = compositeTargets[3].texture;
-		const GLuint t4 = compositeTargets[4].texture;
 
 		// MDAPT (native resolution): scene -> t0 -> t1 -> t2 -> t3 -> t0 (mdapt output).
 		runCompositePass(0, scene, nativeW, nativeH, 0, 0, 0, 0, nativeW, nativeH, 0);
@@ -1676,25 +1733,46 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 		runCompositePass(3, t2, nativeW, nativeH, scene, 0, 0, 3, nativeW, nativeH, 0);
 		runCompositePass(4, t3, nativeW, nativeH, scene, 0, 0, 0, nativeW, nativeH, 0);
 
-		// ScaleFX-Hybrid: mdapt output -> t1 -> t2 -> t3 (+t1 as prev2) -> t4 -> 3x target.
-		runCompositePass(5, t0, nativeW, nativeH, 0, 0, 0, 1, nativeW, nativeH, 0);
-		runCompositePass(6, t1, nativeW, nativeH, 0, 0, 0, 2, nativeW, nativeH, 0);
-		runCompositePass(7, t2, nativeW, nativeH, 0, t1, 0, 3, nativeW, nativeH, 0);
-		runCompositePass(8, t3, nativeW, nativeH, 0, 0, 0, 4, nativeW, nativeH, 0);
-		runCompositePass(9, t4, nativeW, nativeH, t0, 0, t0, 5, tripleW, tripleH, 0);
+		// Super 2xSaI: repeat the 2x pass until the chain covers the output.
+		GLuint scaleTex = t0;
+		int scaleW = nativeW;
+		int scaleH = nativeH;
+		for (int i = 0; i < steps; ++i) {
+			const int nextW = scaleW * 2;
+			const int nextH = scaleH * 2;
+			runCompositePass(COMPOSITE_PASS_SCALE, scaleTex, scaleW, scaleH, 0, 0, 0, COMPOSITE_TARGET_SCALE_BASE + i, nextW, nextH, 0);
+			scaleTex = compositeTargets[COMPOSITE_TARGET_SCALE_BASE + i].texture;
+			scaleW = nextW;
+			scaleH = nextH;
+		}
 
-		// sharpsmoother resolve into the screen-sized target, restoring the map
-		// alpha so the editor background shows through where the scene is
-		// transparent. Cached with the rest of the chain.
-		runCompositePass(10, compositeTargets[5].texture, tripleW, tripleH, 0, 0, 0, 6, outputWidth, outputHeight, fboData.texture, sourceScaleX, sourceScaleY);
+		// Nearest downscale of the 2^steps image to the output resolution.
+		runCompositePass(COMPOSITE_PASS_DOWNSCALE, scaleTex, scaleW, scaleH, 0, 0, 0, COMPOSITE_TARGET_SHARP, outputWidth, outputHeight, 0);
+
+		// Glow/halation: threshold -> separable blur at quarter resolution.
+		runCompositePass(COMPOSITE_PASS_THRESHOLD, compositeTargets[COMPOSITE_TARGET_SHARP].texture, outputWidth, outputHeight, 0, 0, 0, COMPOSITE_TARGET_THRESHOLD, quarterW, quarterH, 0);
+		runCompositePass(COMPOSITE_PASS_BLUR_H, compositeTargets[COMPOSITE_TARGET_THRESHOLD].texture, quarterW, quarterH, 0, 0, 0, COMPOSITE_TARGET_BLUR_H, quarterW, quarterH, 0);
+		runCompositePass(COMPOSITE_PASS_BLUR_V, compositeTargets[COMPOSITE_TARGET_BLUR_H].texture, quarterW, quarterH, 0, 0, 0, COMPOSITE_TARGET_BLUR_V, quarterW, quarterH, 0);
+
+		compositeCacheValid = true;
+		compositeCacheW = outputWidth;
+		compositeCacheH = outputHeight;
+		compositeCacheSteps = steps;
 	}
 
-	if (compositeTargets[6].texture == 0) {
+	if (!compositeCacheValid) {
 		return;
 	}
 
-	// CRT phosphor bloom: per-channel glow with a P22-ish tint, to the screen.
-	runCompositePass(11, compositeTargets[6].texture, outputWidth, outputHeight, 0, 0, 0, -1, outputWidth, outputHeight, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, outputWidth, outputHeight);
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// Glow resolve (sharp + P22-tinted halation) to the screen, restoring the map
+	// alpha so the editor background shows through transparent areas.
+	runCompositePass(COMPOSITE_PASS_RESOLVE, compositeTargets[COMPOSITE_TARGET_BLUR_V].texture, quarterW, quarterH,
+		compositeTargets[COMPOSITE_TARGET_SHARP].texture, 0, 0, -1, outputWidth, outputHeight, fboData.texture, sourceScaleX, sourceScaleY);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(0, 0, outputWidth, outputHeight);
@@ -1710,7 +1788,8 @@ bool GLRenderer::compositeFits(int width, int height) {
 	}
 	GLint maxTextureSize = 0;
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
-	if (maxTextureSize > 0 && (width > maxTextureSize / 3 || height > maxTextureSize / 3)) {
+	// The first 2x Super 2xSaI step must fit alongside the native scene.
+	if (maxTextureSize > 0 && (width > maxTextureSize / 2 || height > maxTextureSize / 2)) {
 		return false;
 	}
 	return true;

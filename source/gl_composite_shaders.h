@@ -1,8 +1,10 @@
 #ifndef RME_GL_COMPOSITE_SHADERS_H_
 #define RME_GL_COMPOSITE_SHADERS_H_
-// Generated from libretro/glsl-shaders: MDAPT v2.8 (Sp00kyFox), ScaleFX-Hybrid (Sp00kyFox) and sharpsmoother (Sp00kyFox).
+// Generated from libretro shaders: MDAPT v2.8 (Sp00kyFox), Super 2xSaI
+// (Derek Liauw Kie Fa / DOSBox team / guest(r)), crt-hyllian-glow (Hyllian/hunterk).
 // Each fragment shader shares a common vertex stage that emits TEX0/COL0.
-// Calibration (lower = less smoothing): SFX_RAA/SFX_CLR/`smoot` below.
+// The ScaleFX-Hybrid, sharpsmoother and old custom bloom sources below are kept
+// for reference but are no longer part of the pass chain (see compositePassSrc).
 
 static const char* const compositeVertexSrc = R"GLSL(
 #version 330
@@ -867,7 +869,7 @@ void main()
 #endif
 )GLSL";
 
-static const char* const compositeScalefx0Src = R"GLSL(#version 330
+[[maybe_unused]] static const char* const compositeScalefx0Src = R"GLSL(#version 330
 #define FRAGMENT
 
 
@@ -1043,7 +1045,7 @@ void main()
 #endif
 )GLSL";
 
-static const char* const compositeScalefx1Src = R"GLSL(#version 330
+[[maybe_unused]] static const char* const compositeScalefx1Src = R"GLSL(#version 330
 #define FRAGMENT
 
 
@@ -1239,7 +1241,7 @@ void main()
 #endif
 )GLSL";
 
-static const char* const compositeScalefx2Src = R"GLSL(#version 330
+[[maybe_unused]] static const char* const compositeScalefx2Src = R"GLSL(#version 330
 #define FRAGMENT
 
 
@@ -1481,7 +1483,7 @@ void main()
 #endif
 )GLSL";
 
-static const char* const compositeScalefx3Src = R"GLSL(#version 330
+[[maybe_unused]] static const char* const compositeScalefx3Src = R"GLSL(#version 330
 #define FRAGMENT
 
 
@@ -1747,7 +1749,7 @@ void main()
 #endif
 )GLSL";
 
-static const char* const compositeScalefx4Src = R"GLSL(#version 330
+[[maybe_unused]] static const char* const compositeScalefx4Src = R"GLSL(#version 330
 #define FRAGMENT
 
 
@@ -1966,7 +1968,7 @@ void main()
 #endif
 )GLSL";
 
-static const char* const compositeSharpsmootherSrc = R"GLSL(#version 330
+[[maybe_unused]] static const char* const compositeSharpsmootherSrc = R"GLSL(#version 330
 #define FRAGMENT
 uniform sampler2D AlphaSource;
 /*
@@ -2153,7 +2155,7 @@ void main()
 #endif
 )GLSL";
 
-static const char* const compositeCrtBloomSrc = R"GLSL(#version 330
+[[maybe_unused]] static const char* const compositeCrtBloomSrc = R"GLSL(#version 330
 #define FRAGMENT
 // CRT phosphor bloom (custom, not from libretro).
 // Vintage-CRT light diffusion, not a physical P22 simulation and no scanlines.
@@ -2287,20 +2289,285 @@ void main()
 }
 )GLSL";
 
-static const int compositePassCount = 12;
+static const char* const compositeSuper2xSaiSrc = R"GLSL(#version 330
+// Super 2xSaI 2x pixel-art upscaler (one 2x pass).
+// GET_RESULT/reduce: (c) 1999-2001 Derek Liauw Kie Fa (GPL).
+// Super2xSaI core: (c) 2002-2007 The DOSBox Team (GPL), guest(r) 2007.
+// Ported from libretro/common-shaders xsai/shaders/super-2xsai.cg.
+uniform sampler2D Texture;
+uniform vec2 TextureSize;
+uniform vec2 OutputSize;
+uniform vec2 InputSize;
+in vec4 TEX0;
+out vec4 FragColor;
+
+#define Source Texture
+#define vTexCoord TEX0.xy
+
+const vec3 dtt = vec3(65536.0, 255.0, 1.0);
+
+int GET_RESULT(float A, float B, float C, float D)
+{
+	int x = 0;
+	int y = 0;
+	int r = 0;
+	if (A == C) x += 1; else if (B == C) y += 1;
+	if (A == D) x += 1; else if (B == D) y += 1;
+	if (x <= 1) r += 1;
+	if (y <= 1) r -= 1;
+	return r;
+}
+
+float reduce(vec3 color)
+{
+	return dot(color, dtt);
+}
+
+vec3 samplePoint(vec2 uv)
+{
+	return texture(Source, uv).rgb;
+}
+
+void main()
+{
+	vec2 ps = vec2(0.999 / TextureSize.x, 0.999 / TextureSize.y);
+
+	vec2 dx = vec2(ps.x, 0.0);
+	vec2 dy = vec2(0.0, ps.y);
+	vec2 g1 = vec2(ps.x, ps.y);
+	vec2 g2 = vec2(-ps.x, ps.y);
+
+	vec2 pixcoord = vTexCoord / ps;
+	vec2 fp = fract(pixcoord);
+	vec2 pC4 = vTexCoord - fp * ps;
+	vec2 pC8 = pC4 + g1;
+
+	vec3 C0 = samplePoint(pC4 - g1);
+	vec3 C1 = samplePoint(pC4 - dy);
+	vec3 C2 = samplePoint(pC4 - g2);
+	vec3 D3 = samplePoint(pC4 - g2 + dx);
+	vec3 C3 = samplePoint(pC4 - dx);
+	vec3 C4 = samplePoint(pC4);
+	vec3 C5 = samplePoint(pC4 + dx);
+	vec3 D4 = samplePoint(pC8 - g2);
+	vec3 C6 = samplePoint(pC4 + g2);
+	vec3 C7 = samplePoint(pC4 + dy);
+	vec3 C8 = samplePoint(pC4 + g1);
+	vec3 D5 = samplePoint(pC8 + dx);
+	vec3 D0 = samplePoint(pC4 + g2 + dy);
+	vec3 D1 = samplePoint(pC8 + g2);
+	vec3 D2 = samplePoint(pC8 + dy);
+	vec3 D6 = samplePoint(pC8 + g1);
+
+	float c0 = reduce(C0); float c1 = reduce(C1);
+	float c2 = reduce(C2); float c3 = reduce(C3);
+	float c4 = reduce(C4); float c5 = reduce(C5);
+	float c6 = reduce(C6); float c7 = reduce(C7);
+	float c8 = reduce(C8); float d0 = reduce(D0);
+	float d1 = reduce(D1); float d2 = reduce(D2);
+	float d3 = reduce(D3); float d4 = reduce(D4);
+	float d5 = reduce(D5); float d6 = reduce(D6);
+
+	vec3 p00;
+	vec3 p10;
+	vec3 p01;
+	vec3 p11;
+
+	if (c7 == c5 && c4 != c8) {
+		p11 = p01 = C7;
+	} else if (c4 == c8 && c7 != c5) {
+		p11 = p01 = C4;
+	} else if (c4 == c8 && c7 == c5) {
+		int r = 0;
+		r += GET_RESULT(c5, c4, c6, d1);
+		r += GET_RESULT(c5, c4, c3, c1);
+		r += GET_RESULT(c5, c4, d2, d5);
+		r += GET_RESULT(c5, c4, c2, d4);
+		if (r > 0) {
+			p11 = p01 = C5;
+		} else if (r < 0) {
+			p11 = p01 = C4;
+		} else {
+			p11 = p01 = 0.5 * (C4 + C5);
+		}
+	} else {
+		if (c5 == c8 && c8 == d1 && c7 != d2 && c8 != d0) {
+			p11 = 0.25 * (3.0 * C8 + C7);
+		} else if (c4 == c7 && c7 == d2 && d1 != c8 && c7 != d6) {
+			p11 = 0.25 * (3.0 * C7 + C8);
+		} else {
+			p11 = 0.5 * (C7 + C8);
+		}
+
+		if (c5 == c8 && c5 == c1 && c4 != c2 && c5 != c0) {
+			p01 = 0.25 * (3.0 * C5 + C4);
+		} else if (c4 == c7 && c4 == c2 && c1 != c5 && c4 != d3) {
+			p01 = 0.25 * (3.0 * C4 + C5);
+		} else {
+			p01 = 0.5 * (C4 + C5);
+		}
+	}
+
+	if (c4 == c8 && c7 != c5 && c3 == c4 && c4 != d2) {
+		p10 = 0.5 * (C7 + C4);
+	} else if (c4 == c6 && c5 == c4 && c3 != c7 && c4 != d0) {
+		p10 = 0.5 * (C7 + C4);
+	} else {
+		p10 = C7;
+	}
+
+	if (c7 == c5 && c4 != c8 && c6 == c7 && c7 != c2) {
+		p00 = 0.5 * (C7 + C4);
+	} else if (c3 == c7 && c8 == c7 && c6 != c4 && c7 != c0) {
+		p00 = 0.5 * (C7 + C4);
+	} else {
+		p00 = C4;
+	}
+
+	if (fp.x < 0.50) {
+		if (fp.y < 0.50) {
+			p10 = p00;
+		}
+	} else {
+		if (fp.y < 0.50) {
+			p10 = p01;
+		} else {
+			p10 = p11;
+		}
+	}
+
+	FragColor = vec4(p10, 1.0);
+}
+)GLSL";
+
+static const char* const compositeDownscaleSrc = R"GLSL(#version 330
+// Downscale of the Super 2xSaI chain to the output resolution. The source is
+// bound with GL_NEAREST, so this is a crisp nearest-neighbour resolve.
+uniform sampler2D Texture;
+uniform vec2 TextureSize;
+uniform vec2 OutputSize;
+uniform vec2 InputSize;
+in vec4 TEX0;
+out vec4 FragColor;
+void main()
+{
+	FragColor = vec4(texture(Texture, TEX0.xy).rgb, 1.0);
+}
+)GLSL";
+
+static const char* const compositeGlowThresholdSrc = R"GLSL(#version 330
+// crt-hyllian-glow (Hyllian/hunterk, GPL): glow source threshold.
+// Linearizes the sharp image, applies the 1.15 whitepoint gain and rolls off.
+#define GLOW_WHITEPOINT 1.0
+#define GLOW_ROLLOFF 4.0
+uniform sampler2D Texture;
+uniform vec2 TextureSize;
+uniform vec2 OutputSize;
+uniform vec2 InputSize;
+in vec4 TEX0;
+out vec4 FragColor;
+void main()
+{
+	vec3 lin = pow(texture(Texture, TEX0.xy).rgb, vec3(2.2));
+	vec3 factor = clamp((1.15 * lin) / GLOW_WHITEPOINT, 0.0, 1.0);
+	FragColor = vec4(pow(factor, vec3(GLOW_ROLLOFF)), 1.0);
+}
+)GLSL";
+
+static const char* const compositeGlowBlurHSrc = R"GLSL(#version 330
+// crt-hyllian-glow: separable horizontal glow blur (GLOW_FALLOFF, 9 taps).
+#define GLOW_FALLOFF 0.35
+uniform sampler2D Texture;
+uniform vec2 TextureSize;
+uniform vec2 OutputSize;
+uniform vec2 InputSize;
+in vec4 TEX0;
+out vec4 FragColor;
+void main()
+{
+	vec3 col = vec3(0.0);
+	float dx = 4.0 / TextureSize.x;
+	float kTotal = 0.0;
+	for (int i = -4; i <= 4; ++i) {
+		float k = exp(-GLOW_FALLOFF * float(i) * float(i));
+		kTotal += k;
+		col += k * texture(Texture, TEX0.xy + vec2(float(i) * dx, 0.0)).rgb;
+	}
+	FragColor = vec4(col / kTotal, 1.0);
+}
+)GLSL";
+
+static const char* const compositeGlowBlurVSrc = R"GLSL(#version 330
+// crt-hyllian-glow: separable vertical glow blur (GLOW_FALLOFF, 9 taps).
+#define GLOW_FALLOFF 0.35
+uniform sampler2D Texture;
+uniform vec2 TextureSize;
+uniform vec2 OutputSize;
+uniform vec2 InputSize;
+in vec4 TEX0;
+out vec4 FragColor;
+void main()
+{
+	vec3 col = vec3(0.0);
+	float dy = 4.0 / TextureSize.y;
+	float kTotal = 0.0;
+	for (int i = -4; i <= 4; ++i) {
+		float k = exp(-GLOW_FALLOFF * float(i) * float(i));
+		kTotal += k;
+		col += k * texture(Texture, TEX0.xy + vec2(0.0, float(i) * dy)).rgb;
+	}
+	FragColor = vec4(col / kTotal, 1.0);
+}
+)GLSL";
+
+static const char* const compositeCrtGlowResolveSrc = R"GLSL(#version 330
+// crt-hyllian-glow resolve (glow/halation only; no scanlines or shadow mask).
+// Adds the blurred glow to the sharp image in linear space and tints the
+// halation with the exact NTSC P22 (D65) phosphor primaries.
+#define BLOOM_STRENGTH 0.18
+#define OUTPUT_GAMMA 2.2
+// Exact NTSC P22 (D65) phosphor primaries as normalized linear-RGB columns:
+// R(0.625,0.340) G(0.280,0.605) B(0.155,0.070), white D65. These are close to
+// the sRGB primaries, so the recombination is near-neutral by construction.
+const mat3 P22 = mat3(
+	1.0000, 0.0226, 0.0016,
+	0.0000, 1.0000, 0.0158,
+	0.0102, 0.0163, 1.0000
+);
+uniform sampler2D Texture;
+uniform sampler2D OrigTexture;
+uniform sampler2D AlphaSource;
+uniform vec2 TextureSize;
+uniform vec2 OutputSize;
+uniform vec2 InputSize;
+in vec4 TEX0;
+out vec4 FragColor;
+void main()
+{
+	vec3 sharp = texture(OrigTexture, TEX0.xy).rgb;
+	vec3 bloom = texture(Texture, TEX0.xy).rgb;
+	vec3 base = pow(sharp, vec3(2.2));
+	// Only fill the remaining headroom with the halation so bright areas never
+	// clip to pure white; the glow still shows over dark/mid backgrounds.
+	vec3 lin = base + BLOOM_STRENGTH * (P22 * bloom) * (1.0 - base);
+	vec3 outColor = pow(clamp(lin, 0.0, 1.0), vec3(1.0 / OUTPUT_GAMMA));
+	FragColor = vec4(outColor, texture(AlphaSource, TEX0.xy).a);
+}
+)GLSL";
+
+static const int compositePassCount = 11;
 static const char* const compositePassSrc[compositePassCount] = {
 	compositeMdapt0Src,
 	compositeMdapt1Src,
 	compositeMdapt2Src,
 	compositeMdapt3Src,
 	compositeMdapt4Src,
-	compositeScalefx0Src,
-	compositeScalefx1Src,
-	compositeScalefx2Src,
-	compositeScalefx3Src,
-	compositeScalefx4Src,
-	compositeSharpsmootherSrc,
-	compositeCrtBloomSrc,
+	compositeSuper2xSaiSrc,
+	compositeDownscaleSrc,
+	compositeGlowThresholdSrc,
+	compositeGlowBlurHSrc,
+	compositeGlowBlurVSrc,
+	compositeCrtGlowResolveSrc,
 };
 
 #endif

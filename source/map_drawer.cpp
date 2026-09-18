@@ -279,9 +279,10 @@ void MapDrawer::Draw() {
 	float sceneWidth = viewWidth;
 	float sceneHeight = viewHeight;
 	if (scaleFilter == 2) {
-		// The composite chain (MDAPT + ScaleFX-Hybrid + sharpsmoother) processes
+		// The composite chain (MDAPT + Super 2xSaI + crt-hyllian glow) processes
 		// the scene at native resolution: one FBO texel per map pixel while zoomed
-		// in, window-sized otherwise. The chain then upscales to outputCellSize.
+		// in, window-sized otherwise. The chain then upscales by whole 2x factors
+		// and nearest-downscales to the window.
 		const float nativeScale = std::min(zoom, 1.0f);
 		fboWidth = std::max(1, static_cast<int>(std::ceil(screensize_x * nativeScale)));
 		fboHeight = std::max(1, static_cast<int>(std::ceil(screensize_y * nativeScale)));
