@@ -201,3 +201,105 @@ bool ImGuiOverlay::renderLoadingFooter(wxWindow* canvas, const wxString& message
 
 	return cancelled || cancel_requested.load();
 }
+
+void ImGuiOverlay::renderStatusFooter(wxWindow* canvas, const wxString& message, const wxString& tileText, const wxString& positionText, const wxString& zoomText) {
+	if (!canvas || frame_open || !ensureInitialized()) {
+		return;
+	}
+
+	const wxSize clientSize = canvas->GetClientSize();
+	if (clientSize.x <= 0 || clientSize.y <= 0) {
+		return;
+	}
+
+	const auto now = std::chrono::steady_clock::now();
+	float deltaTime = std::chrono::duration<float>(now - last_frame_time).count();
+	last_frame_time = now;
+	if (deltaTime <= 0.0f || deltaTime > 0.25f) {
+		deltaTime = 1.0f / 60.0f;
+	}
+
+	float scale = static_cast<float>(canvas->GetContentScaleFactor());
+	if (scale <= 0.0f) {
+		scale = 1.0f;
+	}
+
+	const float width = static_cast<float>(clientSize.x);
+	const float height = static_cast<float>(clientSize.y);
+
+	constexpr float barHeight = 24.0f;
+	const float barTop = std::max(0.0f, height - barHeight);
+
+	ImGuiIO &io = ImGui::GetIO();
+	io.DisplaySize = ImVec2(width, height);
+	io.DisplayFramebufferScale = ImVec2(scale, scale);
+	io.DeltaTime = deltaTime;
+
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui::NewFrame();
+	frame_open = true;
+
+	ImGuiStyle &style = ImGui::GetStyle();
+	const ImVec2 oldWindowPadding = style.WindowPadding;
+	const ImVec2 oldCellPadding = style.CellPadding;
+	const ImVec4 oldWindowBg = style.Colors[ImGuiCol_WindowBg];
+	const ImVec4 oldBorder = style.Colors[ImGuiCol_Border];
+
+	style.WindowPadding = ImVec2(8.0f, 4.0f);
+	style.CellPadding = ImVec2(6.0f, 0.0f);
+	style.Colors[ImGuiCol_WindowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.62f);
+	style.Colors[ImGuiCol_Border] = ImVec4(1.0f, 1.0f, 1.0f, 0.10f);
+
+	const ImGuiWindowFlags flags =
+		ImGuiWindowFlags_NoDecoration |
+		ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_NoScrollbar |
+		ImGuiWindowFlags_NoScrollWithMouse |
+		ImGuiWindowFlags_NoNav |
+		ImGuiWindowFlags_NoFocusOnAppearing |
+		ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+	ImGui::SetNextWindowPos(ImVec2(0.0f, barTop));
+	ImGui::SetNextWindowSize(ImVec2(width, barHeight));
+	ImGui::Begin("##rme_status_bar", nullptr, flags);
+
+	const ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoBordersInBody;
+	if (ImGui::BeginTable("##rme_status_fields", 4, tableFlags, ImVec2(0.0f, 0.0f))) {
+		ImGui::TableSetupColumn("msg", ImGuiTableColumnFlags_WidthStretch, 0.30f);
+		ImGui::TableSetupColumn("tile", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+		ImGui::TableSetupColumn("pos", ImGuiTableColumnFlags_WidthStretch, 0.14f);
+		ImGui::TableSetupColumn("zoom", ImGuiTableColumnFlags_WidthStretch, 0.14f);
+		ImGui::TableNextRow();
+
+		ImGui::TableSetColumnIndex(0);
+		const wxScopedCharBuffer messageBuffer = message.utf8_str();
+		ImGui::TextUnformatted(messageBuffer.data());
+
+		ImGui::TableSetColumnIndex(1);
+		const wxScopedCharBuffer tileBuffer = tileText.utf8_str();
+		ImGui::TextUnformatted(tileBuffer.data());
+
+		ImGui::TableSetColumnIndex(2);
+		const wxScopedCharBuffer positionBuffer = positionText.utf8_str();
+		ImGui::TextUnformatted(positionBuffer.data());
+
+		ImGui::TableSetColumnIndex(3);
+		const wxScopedCharBuffer zoomBuffer = zoomText.utf8_str();
+		ImGui::TextUnformatted(zoomBuffer.data());
+
+		ImGui::EndTable();
+	}
+
+	ImGui::End();
+
+	style.WindowPadding = oldWindowPadding;
+	style.CellPadding = oldCellPadding;
+	style.Colors[ImGuiCol_WindowBg] = oldWindowBg;
+	style.Colors[ImGuiCol_Border] = oldBorder;
+
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	frame_open = false;
+}

@@ -362,10 +362,6 @@ MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &si
 		wxLogError(wxString() + "Could not load menubar.xml, editor will NOT be able to show its menu.\n");
 	}
 
-	wxStatusBar* statusbar = CreateStatusBar();
-	statusbar->SetFieldsCount(4);
-	SetStatusText(wxString("Welcome to ") << __W_RME_APPLICATION_NAME__ << " " << __W_RME_VERSION__);
-
 	// Le sizer
 	g_gui.aui_manager = newd wxAuiManager(this);
 	g_gui.tabbook = newd MapTabbook(this, wxID_ANY);

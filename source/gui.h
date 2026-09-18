@@ -247,7 +247,13 @@ public:
 	void UpdateActions();
 	void RefreshActions();
 	void ShowToolbar(ToolBarID id, bool show);
+
+	// Status bar fields rendered by the in-canvas ImGui overlay.
+	static constexpr int STATUS_FIELD_COUNT = 4;
 	void SetStatusText(wxString text);
+	void SetStatusText(wxString text, int index);
+	const wxString &GetStatusText(int index) const;
+
 	bool IsAsyncSqliteBootstrapRunning() const;
 	void StartAsyncSqliteBootstrapImport();
 
@@ -533,6 +539,7 @@ protected:
 	//=========================================================================
 	// Progress bar tracking
 	//=========================================================================
+	wxString status_fields[STATUS_FIELD_COUNT];
 	wxString progressText;
 	bool loadingBarActive;
 	bool loadingBarCanCancel;

@@ -1435,11 +1435,34 @@ void GUI::ChangeFloor(int new_floor) {
 	}
 }
 
-void GUI::SetStatusText(wxString text) {
-	if (g_gui.root == nullptr) {
+const wxString &GUI::GetStatusText(int index) const {
+	static const wxString empty_status_text;
+	if (index < 0 || index >= STATUS_FIELD_COUNT) {
+		return empty_status_text;
+	}
+	return status_fields[index];
+}
+
+void GUI::SetStatusText(wxString text, int index) {
+	if (index < 0 || index >= STATUS_FIELD_COUNT) {
 		return;
 	}
-	g_gui.root->SetStatusText(text, 0);
+
+	if (status_fields[index] == text) {
+		return;
+	}
+	status_fields[index] = text;
+
+	// The status bar is drawn as an overlay inside the map canvas, so the
+	// canvas has to repaint for the new text to become visible.
+	MapTab* tab = GetCurrentMapTab();
+	if (tab && tab->GetCanvas()) {
+		tab->GetCanvas()->RefreshOverlay();
+	}
+}
+
+void GUI::SetStatusText(wxString text) {
+	SetStatusText(text, 0);
 }
 
 bool GUI::IsAsyncSqliteBootstrapRunning() const {

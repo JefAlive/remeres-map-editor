@@ -35,6 +35,8 @@
 #include "live_server.h"
 #include "browse_tile_window.h"
 
+#include "gl_imgui_overlay.h"
+
 #include "main_menubar.h"
 
 #include "doodad_brush.h"
@@ -268,6 +270,17 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 	// Clean unused textures
 	g_gui.gfx.garbageCollection();
 
+	if (g_gui.IsRenderingEnabled()) {
+		// Status bar is drawn as a translucent ImGui overlay on top of the map.
+		ImGuiOverlay::renderStatusFooter(
+			this,
+			g_gui.GetStatusText(0),
+			g_gui.GetStatusText(1),
+			g_gui.GetStatusText(2),
+			g_gui.GetStatusText(3)
+		);
+	}
+
 	// Swap buffer
 	SwapBuffers();
 
@@ -420,7 +433,7 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 	int map_x, map_y;
 	ScreenToMap(x, y, &map_x, &map_y);
 
-	g_gui.root->SetStatusText(fmt::format("x: {} y: {} z: {}", map_x, map_y, floor), 2);
+	g_gui.SetStatusText(fmt::format("x: {} y: {} z: {}", map_x, map_y, floor), 2);
 
 	const auto tile = editor.getMap().getTile(map_x, map_y, floor);
 
@@ -431,7 +444,7 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 	}
 
 	if (!tile) {
-		g_gui.root->SetStatusText(description, 1);
+		g_gui.SetStatusText(description, 1);
 		return;
 	}
 
@@ -461,14 +474,14 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 		description = "Nothing";
 	}
 
-	g_gui.root->SetStatusText(description, 1);
+	g_gui.SetStatusText(description, 1);
 }
 
 void MapCanvas::UpdateZoomStatus() {
 	int percentage = (int)((1.0 / zoom) * 100);
 	wxString ss;
 	ss << "zoom: " << percentage << "%";
-	g_gui.root->SetStatusText(ss, 3);
+	g_gui.SetStatusText(ss, 3);
 }
 
 void MapCanvas::OnMouseMove(wxMouseEvent &event) {
