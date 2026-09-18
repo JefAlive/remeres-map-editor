@@ -337,7 +337,8 @@ bool Application::ParseCommandLineMap(wxString &fileName) {
 }
 
 MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &size) :
-	wxFrame((wxFrame*)nullptr, -1, title, pos, size, wxDEFAULT_FRAME_STYLE) {
+	wxFrame((wxFrame*)nullptr, -1, title, pos, size, wxDEFAULT_FRAME_STYLE),
+	info_bar(nullptr) {
 	// Receive idle events
 	SetExtraStyle(wxWS_EX_PROCESS_IDLE);
 
@@ -371,13 +372,54 @@ MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &si
 
 	tool_bar = newd MainToolBar(this, g_gui.aui_manager);
 
-	g_gui.aui_manager->AddPane(g_gui.tabbook, wxAuiPaneInfo().CenterPane().Floatable(false).CloseButton(false).PaneBorder(false));
+	// Create the inline info bar for non-fatal load warnings.
+	// It is parented to the frame but managed through the center AUI pane
+	// via a vertical sizer so it sits between the toolbars and the tabbook.
+	wxPanel* centerPanel = newd wxPanel(this, wxID_ANY);
+	info_bar = newd wxInfoBar(centerPanel);
+
+	wxBoxSizer* centerSizer = newd wxBoxSizer(wxVERTICAL);
+	centerSizer->Add(info_bar, wxSizerFlags(0).Expand());
+	centerSizer->Add(g_gui.tabbook, wxSizerFlags(1).Expand());
+	centerPanel->SetSizer(centerSizer);
+
+	// Reparent the tabbook so it lives inside the panel
+	g_gui.tabbook->Reparent(centerPanel);
+
+	g_gui.aui_manager->AddPane(centerPanel, wxAuiPaneInfo().CenterPane().Floatable(false).CloseButton(false).PaneBorder(false));
 	g_gui.aui_manager->Update();
 
 	UpdateMenubar();
 }
 
 MainFrame::~MainFrame() = default;
+
+void MainFrame::ShowInfoWarnings(const wxArrayString &warnings) {
+	if (warnings.empty() || !info_bar) {
+		return;
+	}
+
+	// Build a concise single-line summary; full list is visible in the log.
+	wxString summary;
+	if (warnings.GetCount() == 1) {
+		summary = warnings[0];
+	} else {
+		summary = wxString::Format("(%zu) load warnings: ", warnings.GetCount());
+		for (size_t i = 0; i < warnings.GetCount(); ++i) {
+			if (i > 0) {
+				summary << " | ";
+			}
+			// Trim at 80 chars per message to keep bar readable
+			wxString msg = warnings[i];
+			if (msg.length() > 80) {
+				msg = msg.Left(77) + "...";
+			}
+			summary << msg;
+		}
+	}
+
+	info_bar->ShowMessage(summary, wxICON_WARNING);
+}
 
 void MainFrame::OnIdle(wxIdleEvent &event) {
 	////

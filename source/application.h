@@ -101,9 +101,17 @@ public:
 
 	void PrepareDC(wxDC &dc);
 
+	/**
+	 * Shows a dismissible info bar at the top of the workspace with a
+	 * summary of non-fatal load warnings. Safe to call with an empty array
+	 * (no-op in that case).
+	 */
+	void ShowInfoWarnings(const wxArrayString &warnings);
+
 protected:
 	MainMenuBar* menu_bar;
 	MainToolBar* tool_bar;
+	wxInfoBar* info_bar; ///< Non-modal inline warning bar (below toolbars)
 
 	friend class Application;
 	friend class GUI;

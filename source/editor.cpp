@@ -60,7 +60,7 @@ Editor::Editor(CopyBuffer &copybuffer) :
 	wxArrayString warnings;
 	if (!g_gui.loadMapWindow(error, warnings)) {
 		g_gui.PopupDialog("Error", error, wxOK);
-		g_gui.ListDialog("Warnings", warnings);
+		g_gui.ShowWarnings("Asset load warnings", warnings);
 	}
 
 	MapVersion version;
@@ -124,7 +124,7 @@ Editor::Editor(CopyBuffer &copybuffer, const FileName &fn) :
 			dialog.Destroy();
 		}
 	} else {
-		g_gui.ListDialog("Warnings", warnings);
+		g_gui.ShowWarnings("Asset load warnings", warnings);
 	}
 
 	if (success) {
@@ -472,7 +472,7 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 		g_gui.PopupDialog("Error", "Error loading map!\n" + imported_map.getError(), wxOK | wxICON_INFORMATION);
 		return false;
 	}
-	g_gui.ListDialog("Warning", imported_map.getWarnings());
+	g_gui.ShowWarnings("Map import warnings", imported_map.getWarnings());
 
 	Position offset(import_x_offset, import_y_offset, import_z_offset);
 

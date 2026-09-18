@@ -244,6 +244,14 @@ public:
 		ShowTextBox(nullptr, title, contents);
 	}
 
+	/**
+	 * Displays non-fatal load warnings in the main window's inline info bar
+	 * instead of a blocking modal dialog. Falls back to ListDialog when the
+	 * main frame is not yet available (e.g. during early startup).
+	 * Safe to call with an empty array (no-op).
+	 */
+	void ShowWarnings(const wxString &title, const wxArrayString &warnings);
+
 	// Get the current GL context
 	// Param is required if the context is to be created.
 	wxGLContext* GetGLContext(wxGLCanvas* win);

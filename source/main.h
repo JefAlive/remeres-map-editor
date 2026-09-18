@@ -96,6 +96,7 @@ _Ret_bytecap_(_Size) inline void* __CRTDECL operator new[](size_t _Size, const c
 #include <wx/event.h>
 #include <wx/splitter.h>
 #include <wx/chartype.h>
+#include <wx/infobar.h>
 #include <wx/artprov.h>
 #include <wx/collpane.h>
 #include <wx/listbook.h>

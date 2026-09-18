@@ -1696,7 +1696,7 @@ void MainMenuBar::OnReloadDataFiles(wxCommandEvent &WXUNUSED(event)) {
 	wxArrayString warnings;
 	g_gui.loadMapWindow(error, warnings, true);
 	g_gui.PopupDialog("Error", error, wxOK);
-	g_gui.ListDialog("Warnings", warnings);
+	g_gui.ShowWarnings("Reload warnings", warnings);
 	auto clientDirectory = ClientAssets::getPath().ToStdString() + "/";
 	if (clientDirectory.empty() || !wxDirExists(wxString(clientDirectory))) {
 		PreferencesWindow dialog(nullptr);

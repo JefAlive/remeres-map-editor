@@ -574,7 +574,7 @@ bool GUI::LoadMap(const FileName &fileName) {
 
 	mapTab->GetView()->FitToMap();
 	UpdateTitle();
-	ListDialog("Map loader errors", mapTab->GetMap()->getWarnings());
+	ShowWarnings("Map loader warnings", mapTab->GetMap()->getWarnings());
 	// Npc and monsters
 	root->DoQueryImportCreatures();
 
@@ -1979,6 +1979,26 @@ long GUI::PopupDialog(wxWindow* parent, wxString title, wxString text, long styl
 
 long GUI::PopupDialog(wxString title, wxString text, long style, wxString configsavename, uint32_t configsavevalue) {
 	return g_gui.PopupDialog(g_gui.root, title, text, style, configsavename, configsavevalue);
+}
+
+void GUI::ShowWarnings(const wxString &title, const wxArrayString &warnings) {
+	if (warnings.empty()) {
+		return;
+	}
+
+	// Always write every warning to the log so it is never silently lost.
+	for (const wxString &w : warnings) {
+		spdlog::warn("[{}] {}", title.ToStdString(), w.ToStdString());
+	}
+
+	// Prefer the inline info bar when the main frame is live.
+	if (root) {
+		root->ShowInfoWarnings(warnings);
+		return;
+	}
+
+	// Fallback: frame not yet created (should rarely happen).
+	ListDialog(nullptr, title, warnings);
 }
 
 void GUI::ListDialog(wxWindow* parent, wxString title, const wxArrayString &param_items) {
