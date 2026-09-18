@@ -112,7 +112,6 @@ void MapTab::VisibilityCheck() {
 }
 
 void MapTab::OnSwitchEditorMode(EditorMode mode) {
-	gem->SetSprite(mode == DRAWING_MODE ? EDITOR_SPRITE_DRAWING_GEM : EDITOR_SPRITE_SELECTION_GEM);
 	if (mode == SELECTION_MODE) {
 		canvas->EnterSelectionMode();
 	} else {

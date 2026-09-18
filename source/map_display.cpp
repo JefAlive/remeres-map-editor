@@ -36,6 +36,7 @@
 #include "browse_tile_window.h"
 
 #include "gl_imgui_overlay.h"
+#include "canvas_overlay.h"
 
 #include "main_menubar.h"
 
@@ -168,8 +169,8 @@ void MapCanvas::QueueRefresh(bool mark_scene_dirty) {
 	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
 		refresh_watch.Start();
 		wxGLCanvas::Update();
-	}
-	wxGLCanvas::Refresh();
+}
+wxGLCanvas::Refresh();
 }
 
 void MapCanvas::SetZoom(double value) {
@@ -271,13 +272,42 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 	g_gui.gfx.garbageCollection();
 
 	if (g_gui.IsRenderingEnabled()) {
-		// Status bar is drawn as a translucent ImGui overlay on top of the map.
+		// Compute overlay scrollbar geometry
+		int cw, ch;
+		GetClientSize(&cw, &ch);
+		MapWindow* window = GetMapWindow();
+		int sx, sy, rx, ry;
+		window->GetViewStart(&sx, &sy);
+		window->GetScrollRange(&rx, &ry);
+		auto vg = CanvasOverlay::VerticalBar(cw, ch, sy, ry, int(ch * zoom), CanvasOverlay::kStatusBarHeight);
+		auto hg = CanvasOverlay::HorizontalBar(cw, ch, sx, rx, int(cw * zoom), CanvasOverlay::kStatusBarHeight);
+
+		ImGuiOverlay::ScrollbarInfo vbar, hbar;
+		if (vg.visible) {
+			vbar.visible = true;
+			vbar.thumb_start = vg.thumb_start;
+			vbar.thumb_length = vg.thumb_length;
+			vbar.cross_start = vg.cross_start;
+			vbar.thickness = vg.thickness;
+			vbar.alpha = 1.0f;
+		}
+		if (hg.visible) {
+			hbar.visible = true;
+			hbar.thumb_start = hg.thumb_start;
+			hbar.thumb_length = hg.thumb_length;
+			hbar.cross_start = hg.cross_start;
+			hbar.thickness = hg.thickness;
+			hbar.alpha = 1.0f;
+		}
+
+		// Status bar and scrollbars are drawn as a translucent ImGui overlay on top of the map.
 		ImGuiOverlay::renderStatusFooter(
 			this,
 			g_gui.GetStatusText(0),
 			g_gui.GetStatusText(1),
 			g_gui.GetStatusText(2),
-			g_gui.GetStatusText(3)
+			g_gui.GetStatusText(3),
+			&vbar, &hbar
 		);
 	}
 
@@ -485,6 +515,42 @@ void MapCanvas::UpdateZoomStatus() {
 }
 
 void MapCanvas::OnMouseMove(wxMouseEvent &event) {
+	// Handle overlay scrollbar drag
+	if (scrollbar_dragging_v || scrollbar_dragging_h) {
+		int mx = event.GetX();
+		int my = event.GetY();
+		int cw, ch;
+		GetClientSize(&cw, &ch);
+		MapWindow* window = GetMapWindow();
+		int sx, sy, rx, ry;
+		window->GetViewStart(&sx, &sy);
+		window->GetScrollRange(&rx, &ry);
+		auto vg = CanvasOverlay::VerticalBar(cw, ch, sy, ry, int(ch * zoom), CanvasOverlay::kStatusBarHeight);
+		auto hg = CanvasOverlay::HorizontalBar(cw, ch, sx, rx, int(cw * zoom), CanvasOverlay::kStatusBarHeight);
+		if (scrollbar_dragging_v && vg.visible) {
+			float travel = vg.track_length - vg.thumb_length;
+			if (travel > 0.0f) {
+				float t = std::clamp((my - vg.track_start - scrollbar_grab_v) / travel, 0.0f, 1.0f);
+				int maxscroll = std::max(0, ry - int(ch * zoom));
+				int newscroll = int(t * maxscroll);
+				window->Scroll(sx, newscroll);
+				RefreshOverlay();
+			}
+		}
+		if (scrollbar_dragging_h && hg.visible) {
+			float travel = hg.track_length - hg.thumb_length;
+			if (travel > 0.0f) {
+				float t = std::clamp((mx - hg.track_start - scrollbar_grab_h) / travel, 0.0f, 1.0f);
+				int maxscroll = std::max(0, rx - int(cw * zoom));
+				int newscroll = int(t * maxscroll);
+				window->Scroll(newscroll, sy);
+				RefreshOverlay();
+			}
+		}
+		return;
+	}
+
+	// Update scrollbar hover state for fade-in
 	if (screendragging) {
 		GetMapWindow()->ScrollRelative(int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (event.GetX() - cursor_x)), int(g_settings.getFloat(Config::SCROLL_SPEED) * zoom * (event.GetY() - cursor_y)));
 		Refresh();
@@ -712,6 +778,53 @@ void MapCanvas::OnMouseRightRelease(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseActionClick(wxMouseEvent &event) {
+	// Check if clicking on overlay scrollbar
+	int mx = event.GetX();
+	int my = event.GetY();
+	int cw, ch;
+	GetClientSize(&cw, &ch);
+	MapWindow* window = GetMapWindow();
+	int sx, sy, rx, ry;
+	window->GetViewStart(&sx, &sy);
+	window->GetScrollRange(&rx, &ry);
+	auto vg = CanvasOverlay::VerticalBar(cw, ch, sy, ry, int(ch * zoom), CanvasOverlay::kStatusBarHeight);
+	auto hg = CanvasOverlay::HorizontalBar(cw, ch, sx, rx, int(cw * zoom), CanvasOverlay::kStatusBarHeight);
+	if (vg.visible && CanvasOverlay::HitTestVertical(vg, mx, my)) {
+		if (CanvasOverlay::HitTestThumbVertical(vg, mx, my)) {
+			scrollbar_grab_v = my - vg.thumb_start;
+		} else {
+			scrollbar_grab_v = vg.thumb_length * 0.5f;
+			// Jump to clicked position
+			float travel = vg.track_length - vg.thumb_length;
+			if (travel > 0.0f) {
+				float t = std::clamp((my - vg.track_start - scrollbar_grab_v) / travel, 0.0f, 1.0f);
+				int maxscroll = std::max(0, ry - int(ch * zoom));
+				int newscroll = int(t * maxscroll);
+				window->Scroll(sx, newscroll);
+				RefreshOverlay();
+			}
+		}
+		scrollbar_dragging_v = true;
+		return;
+	}
+	if (hg.visible && CanvasOverlay::HitTestHorizontal(hg, mx, my)) {
+		if (CanvasOverlay::HitTestThumbHorizontal(hg, mx, my)) {
+			scrollbar_grab_h = mx - hg.thumb_start;
+		} else {
+			scrollbar_grab_h = hg.thumb_length * 0.5f;
+			float travel = hg.track_length - hg.thumb_length;
+			if (travel > 0.0f) {
+				float t = std::clamp((mx - hg.track_start - scrollbar_grab_h) / travel, 0.0f, 1.0f);
+				int maxscroll = std::max(0, rx - int(cw * zoom));
+				int newscroll = int(t * maxscroll);
+				window->Scroll(newscroll, sy);
+				RefreshOverlay();
+			}
+		}
+		scrollbar_dragging_h = true;
+		return;
+	}
+
 	SetFocus();
 
 	int mouse_map_x, mouse_map_y;
@@ -1056,6 +1169,13 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseActionRelease(wxMouseEvent &event) {
+	// End overlay scrollbar drag
+	if (scrollbar_dragging_v || scrollbar_dragging_h) {
+		scrollbar_dragging_v = false;
+		scrollbar_dragging_h = false;
+		return;
+	}
+
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
 

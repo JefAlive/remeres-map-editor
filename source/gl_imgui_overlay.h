@@ -43,10 +43,22 @@ namespace ImGuiOverlay {
 	// possible when canCancel is set).
 	bool renderLoadingFooter(wxWindow* canvas, const wxString& message, int progressPercent, bool canCancel);
 
-	// Draws the translucent bottom status bar overlay inside `canvas`. The
-	// fields mirror the old wxStatusBar: transient message, tile description,
-	// cursor position and zoom.
-	void renderStatusFooter(wxWindow* canvas, const wxString& message, const wxString& tileText, const wxString& positionText, const wxString& zoomText);
+	// Scrollbar geometry for the overlay.
+	struct ScrollbarInfo {
+		bool visible = false;
+		float thumb_start = 0.0f;
+		float thumb_length = 0.0f;
+		float cross_start = 0.0f;
+		float thickness = 0.0f;
+		float alpha = 1.0f;
+	};
+
+	// Draws the translucent bottom status bar overlay inside `canvas`, plus
+	// optional overlay scrollbars. The fields mirror the old wxStatusBar:
+	// transient message, tile description, cursor position and zoom.
+	void renderStatusFooter(wxWindow* canvas, const wxString& message, const wxString& tileText,
+	                        const wxString& positionText, const wxString& zoomText,
+	                        const ScrollbarInfo* vbar = nullptr, const ScrollbarInfo* hbar = nullptr);
 
 	// Discards a pending cancel request, e.g. when a new bar is created.
 	void resetCancelRequest();

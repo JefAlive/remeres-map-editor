@@ -472,7 +472,6 @@ public:
 	CopyBuffer copybuffer;
 
 	MinimapWindow* minimap;
-	DCButton* gem; // The small gem in the lower-right corner
 	SearchResultWindow* search_result_window;
 	ActionsHistoryWindow* actions_history_window;
 	LuaScriptsWindow* script_manager_window;

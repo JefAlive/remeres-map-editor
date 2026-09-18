@@ -73,7 +73,6 @@ GUI::GUI() :
 	aui_manager(nullptr),
 	root(nullptr),
 	minimap(nullptr),
-	gem(nullptr),
 	search_result_window(nullptr),
 	actions_history_window(nullptr),
 	script_manager_window(nullptr),

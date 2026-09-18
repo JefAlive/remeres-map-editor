@@ -25,6 +25,11 @@
 MapWindow::MapWindow(wxWindow* parent, Editor &editor) :
 	wxPanel(parent, PANE_MAIN),
 	editor(editor),
+	canvas(nullptr),
+	scroll_x(0),
+	scroll_y(0),
+	range_x(1),
+	range_y(1),
 	replaceItemsDialog(nullptr) {
 	int GL_settings[8];
 	GL_settings[0] = WX_GL_RGBA;
@@ -37,22 +42,11 @@ MapWindow::MapWindow(wxWindow* parent, Editor &editor) :
 	GL_settings[7] = 0;
 	canvas = newd MapCanvas(this, editor, GL_settings);
 
-	vScroll = newd MapScrollBar(this, MAP_WINDOW_VSCROLL, wxVERTICAL, canvas);
-	hScroll = newd MapScrollBar(this, MAP_WINDOW_HSCROLL, wxHORIZONTAL, canvas);
-
-	gem = newd DCButton(this, MAP_WINDOW_GEM, wxDefaultPosition, DC_BTN_NORMAL, RENDER_SIZE_16x16, EDITOR_SPRITE_SELECTION_GEM);
-
-	wxFlexGridSizer* topsizer = newd wxFlexGridSizer(2, 0, 0);
-
-	topsizer->AddGrowableCol(0);
-	topsizer->AddGrowableRow(0);
-
+	// The canvas fills the whole panel; scrolling is drawn by the canvas as an
+	// overlay and is not laid out as a separate widget.
+	wxBoxSizer* topsizer = newd wxBoxSizer(wxVERTICAL);
 	topsizer->Add(canvas, wxSizerFlags(1).Expand());
-	topsizer->Add(vScroll, wxSizerFlags(1).Expand());
-	topsizer->Add(hScroll, wxSizerFlags(1).Expand());
-	topsizer->Add(gem, wxSizerFlags(1));
-
-	SetSizerAndFit(topsizer);
+	SetSizer(topsizer);
 }
 
 MapWindow::~MapWindow() {
@@ -84,23 +78,34 @@ void MapWindow::OnReplaceItemsDialogClose(wxCloseEvent &event) {
 }
 
 void MapWindow::SetSize(int x, int y, bool center) {
-	if (x == 0 || y == 0) {
+	if (x <= 0 || y <= 0) {
 		return;
 	}
 
-	int windowSizeX;
-	int windowSizeY;
+	range_x = x;
+	range_y = y;
 
-	canvas->GetSize(&windowSizeX, &windowSizeY);
-
-	hScroll->SetScrollbar(center ? (x - windowSizeX) / 2 : hScroll->GetThumbPosition(), windowSizeX / x, x, windowSizeX / x);
-	vScroll->SetScrollbar(center ? (y - windowSizeY) / 2 : vScroll->GetThumbPosition(), windowSizeY / y, y, windowSizeX / y);
+	if (center) {
+		// Center the view: camera offset = content_center - view_center
+		int windowSizeX, windowSizeY;
+		canvas->GetSize(&windowSizeX, &windowSizeY);
+		double zoom = g_gui.GetCurrentZoom();
+		scroll_x = x / 2 - int(windowSizeX * zoom / 2.0);
+		scroll_y = y / 2 - int(windowSizeY * zoom / 2.0);
+	}
+	ClampScroll();
 }
 
-void MapWindow::UpdateScrollbars(int nx, int ny) {
-	// nx and ny are size of this window
-	hScroll->SetScrollbar(hScroll->GetThumbPosition(), nx / std::max(1, hScroll->GetRange()), std::max(1, hScroll->GetRange()), 96);
-	vScroll->SetScrollbar(vScroll->GetThumbPosition(), ny / std::max(1, vScroll->GetRange()), std::max(1, vScroll->GetRange()), 96);
+void MapWindow::ClampScroll() {
+	int windowSizeX, windowSizeY;
+	canvas->GetSize(&windowSizeX, &windowSizeY);
+	double zoom = g_gui.GetCurrentZoom();
+	int view_w = int(windowSizeX * zoom);
+	int view_h = int(windowSizeY * zoom);
+	int max_x = std::max(0, range_x - view_w);
+	int max_y = std::max(0, range_y - view_h);
+	scroll_x = std::min(std::max(0, scroll_x), max_x);
+	scroll_y = std::min(std::max(0, scroll_y), max_y);
 }
 
 void MapWindow::UpdateDialogs(bool show) {
@@ -110,8 +115,13 @@ void MapWindow::UpdateDialogs(bool show) {
 }
 
 void MapWindow::GetViewStart(int* x, int* y) {
-	*x = hScroll->GetThumbPosition();
-	*y = vScroll->GetThumbPosition();
+	*x = scroll_x;
+	*y = scroll_y;
+}
+
+void MapWindow::GetScrollRange(int* x, int* y) const {
+	*x = range_x;
+	*y = range_y;
 }
 
 void MapWindow::GetViewSize(int* x, int* y) {
@@ -174,62 +184,20 @@ void MapWindow::Scroll(int x, int y, bool center) {
 		y -= int((windowSizeY * g_gui.GetCurrentZoom()) / 2.0);
 	}
 
-	hScroll->SetThumbPosition(x);
-	vScroll->SetThumbPosition(y);
+	scroll_x = x;
+	scroll_y = y;
+	ClampScroll();
 	g_gui.UpdateMinimap();
 }
 
 void MapWindow::ScrollRelative(int x, int y) {
-	hScroll->SetThumbPosition(hScroll->GetThumbPosition() + x);
-	vScroll->SetThumbPosition(vScroll->GetThumbPosition() + y);
+	scroll_x += x;
+	scroll_y += y;
+	ClampScroll();
 	g_gui.UpdateMinimap();
 }
 
-void MapWindow::OnGem(wxCommandEvent &WXUNUSED(event)) {
-	g_gui.SwitchMode();
-}
-
 void MapWindow::OnSize(wxSizeEvent &event) {
-	UpdateScrollbars(event.GetSize().GetWidth(), event.GetSize().GetHeight());
+	ClampScroll();
 	event.Skip();
-}
-
-void MapWindow::OnScroll(wxScrollEvent &event) {
-	Refresh();
-}
-
-void MapWindow::OnScrollLineDown(wxScrollEvent &event) {
-	if (event.GetOrientation() == wxHORIZONTAL) {
-		ScrollRelative(96, 0);
-	} else {
-		ScrollRelative(0, 96);
-	}
-	Refresh();
-}
-
-void MapWindow::OnScrollLineUp(wxScrollEvent &event) {
-	if (event.GetOrientation() == wxHORIZONTAL) {
-		ScrollRelative(-96, 0);
-	} else {
-		ScrollRelative(0, -96);
-	}
-	Refresh();
-}
-
-void MapWindow::OnScrollPageDown(wxScrollEvent &event) {
-	if (event.GetOrientation() == wxHORIZONTAL) {
-		ScrollRelative(5 * 96, 0);
-	} else {
-		ScrollRelative(0, 5 * 96);
-	}
-	Refresh();
-}
-
-void MapWindow::OnScrollPageUp(wxScrollEvent &event) {
-	if (event.GetOrientation() == wxHORIZONTAL) {
-		ScrollRelative(-5 * 96, 0);
-	} else {
-		ScrollRelative(0, -5 * 96);
-	}
-	Refresh();
 }

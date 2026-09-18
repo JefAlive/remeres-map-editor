@@ -22,12 +22,12 @@
 #include "replace_items_window.h"
 
 class MapCanvas;
-class DCButton;
 
-// Map window, a window displaying a map, complete with scrollbars
-// and everything. This is the window that's inside each tab in the
-// editor. Does NOT control any map rendering or editing at all.
-// MapCanvas does that. (mapdisplay.h)
+// Map window, a window displaying a map. This is the window that's inside each
+// tab in the editor. It owns the map camera state and the containing canvas.
+// The scrollbars are not native widgets anymore: the canvas draws thin overlay
+// scrollbars on top of the map and drives the camera through this window.
+// Does NOT control any map rendering or editing at all. (mapdisplay.h)
 class MapWindow : public wxPanel {
 public:
 	MapWindow(wxWindow* parent, Editor &editor);
@@ -35,20 +35,16 @@ public:
 
 	// Event handlers
 	void OnSize(wxSizeEvent &event);
-	void OnScroll(wxScrollEvent &event);
-	void OnScrollLineDown(wxScrollEvent &event);
-	void OnScrollLineUp(wxScrollEvent &event);
-	void OnScrollPageDown(wxScrollEvent &event);
-	void OnScrollPageUp(wxScrollEvent &event);
-	void OnGem(wxCommandEvent &event);
 
 	// Custom interface for MapWindow
 
 	// GetViewSize returns the size of the containing canvas, in pixels
 	void GetViewSize(int* x, int* y);
 	// Returns the start of the camera on the map, in pixels
-	// Actually is scroll thumb positions
 	void GetViewStart(int* x, int* y);
+
+	// Returns the total scrollable content size, in map pixels
+	void GetScrollRange(int* x, int* y) const;
 
 	// Set size of this window (in pixels)
 	// if center is true, the camera will be moved to the center of the map.
@@ -79,17 +75,19 @@ public:
 	void OnReplaceItemsDialogClose(wxCloseEvent &event);
 
 protected:
-	// For internal use, call to resize the scrollbars with
-	// the newd dimensions of *this* window
-	void UpdateScrollbars(int nx, int ny);
+	// Keeps the camera inside the scrollable area after a resize.
+	void ClampScroll();
 	void UpdateDialogs(bool show);
 
 protected:
 	Editor &editor;
-	DCButton* gem;
 	MapCanvas* canvas;
-	wxScrollBar* hScroll;
-	wxScrollBar* vScroll;
+
+	// Camera offset and content size, in map pixels.
+	int scroll_x;
+	int scroll_y;
+	int range_x;
+	int range_y;
 
 private:
 	ReplaceItemsDialog* replaceItemsDialog;
@@ -98,29 +96,6 @@ private:
 	friend class MainFrame;
 	friend class MapCanvas;
 
-	DECLARE_EVENT_TABLE()
-};
-
-// MapScrollbar, a special scrollbar that relays alot of events
-// to the canvas, which allows scrolling when the scrollbar has
-// focus (even though it also resents focus as hard as it can.
-class MapScrollBar : public wxScrollBar {
-public:
-	MapScrollBar(MapWindow* parent, wxWindowID id, long style, wxWindow* canvas) :
-		wxScrollBar(parent, id, wxDefaultPosition, wxDefaultSize, style), canvas(canvas) { }
-	virtual ~MapScrollBar() { }
-
-	void OnKey(wxKeyEvent &event) {
-		canvas->GetEventHandler()->AddPendingEvent(event);
-	}
-	void OnWheel(wxMouseEvent &event) {
-		canvas->GetEventHandler()->AddPendingEvent(event);
-	}
-	void OnFocus(wxFocusEvent &event) {
-		canvas->SetFocus();
-	}
-
-	wxWindow* canvas;
 	DECLARE_EVENT_TABLE()
 };
 

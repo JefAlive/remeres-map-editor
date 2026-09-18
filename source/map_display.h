@@ -203,6 +203,12 @@ private:
 	MapPopupMenu* popup_menu;
 	AnimationTimer* animation_timer;
 
+	// Overlay scrollbar drag state
+	bool scrollbar_dragging_v = false;
+	bool scrollbar_dragging_h = false;
+	float scrollbar_grab_v = 0.0f;
+	float scrollbar_grab_h = 0.0f;
+
 	friend class MapDrawer;
 	friend class AnimationTimer;
 

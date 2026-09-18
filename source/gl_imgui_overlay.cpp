@@ -18,6 +18,7 @@
 #include "main.h"
 
 #include "gl_imgui_overlay.h"
+#include "canvas_overlay.h"
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -202,7 +203,9 @@ bool ImGuiOverlay::renderLoadingFooter(wxWindow* canvas, const wxString& message
 	return cancelled || cancel_requested.load();
 }
 
-void ImGuiOverlay::renderStatusFooter(wxWindow* canvas, const wxString& message, const wxString& tileText, const wxString& positionText, const wxString& zoomText) {
+void ImGuiOverlay::renderStatusFooter(wxWindow* canvas, const wxString& message, const wxString& tileText,
+                                      const wxString& positionText, const wxString& zoomText,
+                                      const ScrollbarInfo* vbar, const ScrollbarInfo* hbar) {
 	if (!canvas || frame_open || !ensureInitialized()) {
 		return;
 	}
@@ -227,7 +230,7 @@ void ImGuiOverlay::renderStatusFooter(wxWindow* canvas, const wxString& message,
 	const float width = static_cast<float>(clientSize.x);
 	const float height = static_cast<float>(clientSize.y);
 
-	constexpr float barHeight = 24.0f;
+	constexpr float barHeight = CanvasOverlay::kStatusBarHeight;
 	const float barTop = std::max(0.0f, height - barHeight);
 
 	ImGuiIO &io = ImGui::GetIO();
@@ -293,6 +296,29 @@ void ImGuiOverlay::renderStatusFooter(wxWindow* canvas, const wxString& message,
 	}
 
 	ImGui::End();
+
+	// Draw overlay scrollbars on top of everything using the foreground draw list.
+	// More translucent than status bar.
+	ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+
+	if (vbar && vbar->visible && vbar->alpha > 0.0f) {
+		ImU32 color = IM_COL32(0, 0, 0, static_cast<int>(255 * vbar->alpha * 0.35f));
+		draw_list->AddRectFilled(
+			ImVec2(vbar->cross_start, vbar->thumb_start),
+			ImVec2(vbar->cross_start + vbar->thickness, vbar->thumb_start + vbar->thumb_length),
+			color,
+			vbar->thickness * 0.5f
+		);
+	}
+	if (hbar && hbar->visible && hbar->alpha > 0.0f) {
+		ImU32 color = IM_COL32(0, 0, 0, static_cast<int>(255 * hbar->alpha * 0.35f));
+		draw_list->AddRectFilled(
+			ImVec2(hbar->thumb_start, hbar->cross_start),
+			ImVec2(hbar->thumb_start + hbar->thumb_length, hbar->cross_start + hbar->thickness),
+			color,
+			hbar->thickness * 0.5f
+		);
+	}
 
 	style.WindowPadding = oldWindowPadding;
 	style.CellPadding = oldCellPadding;
