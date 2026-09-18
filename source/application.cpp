@@ -378,13 +378,15 @@ MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &si
 	wxPanel* centerPanel = newd wxPanel(this, wxID_ANY);
 	info_bar = newd wxInfoBar(centerPanel);
 
+	// Reparent the tabbook into the panel BEFORE adding it to the sizer:
+	// wxSizer::SetContainingWindow() asserts that every window it manages has
+	// the sizer's window as parent, so ordering matters here.
+	g_gui.tabbook->Reparent(centerPanel);
+
 	wxBoxSizer* centerSizer = newd wxBoxSizer(wxVERTICAL);
 	centerSizer->Add(info_bar, wxSizerFlags(0).Expand());
 	centerSizer->Add(g_gui.tabbook, wxSizerFlags(1).Expand());
 	centerPanel->SetSizer(centerSizer);
-
-	// Reparent the tabbook so it lives inside the panel
-	g_gui.tabbook->Reparent(centerPanel);
 
 	g_gui.aui_manager->AddPane(centerPanel, wxAuiPaneInfo().CenterPane().Floatable(false).CloseButton(false).PaneBorder(false));
 	g_gui.aui_manager->Update();
