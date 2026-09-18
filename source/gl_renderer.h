@@ -106,26 +106,33 @@ private:
 	//   passes 0-4  MDAPT v2.8 checkerboard de-dither, native resolution.
 	//   pass  5     Super 2xSaI, re-run as many 2x steps as needed to cover the
 	//               output (2^steps, capped by GL_MAX_TEXTURE_SIZE).
-	//   pass  6     nearest downscale of the 2^steps image to the output size.
-	//   pass  7     crt-hyllian-glow source threshold (quarter res).
-	//   pass  8/9   separable glow blur (quarter res).
-	//   pass  10    glow resolve (P22 halation + gamma) to the screen.
-	static constexpr int COMPOSITE_PASS_COUNT = 11;
+	//   pass  6     AMD FidelityFX CAS sharpen (5-tap cross), at the 2^steps
+	//               Super 2xSaI resolution.
+	//   pass  7     nearest downscale of the 2^steps image to the output size.
+	//   pass  8     crt-hyllian-glow source threshold (quarter res).
+	//   pass  9/10  separable glow blur (quarter res).
+	//   pass  11    glow resolve (P22 halation + gamma) to the screen.
+	static constexpr int COMPOSITE_PASS_COUNT = 12;
 	// Targets 0-3 are the MDAPT ping-pong buffers, 4..(4+steps-1) the Super 2xSaI
-	// steps, then sharp/threshold/blur-H/blur-V.
+	// steps, then CAS/sharp/threshold/blur-H/blur-V.
 	static constexpr int COMPOSITE_TARGET_COUNT = 16;
 	static constexpr int COMPOSITE_MAX_SCALE_STEPS = 6;
 	static constexpr int COMPOSITE_PASS_SCALE = 5;
-	static constexpr int COMPOSITE_PASS_DOWNSCALE = 6;
-	static constexpr int COMPOSITE_PASS_THRESHOLD = 7;
-	static constexpr int COMPOSITE_PASS_BLUR_H = 8;
-	static constexpr int COMPOSITE_PASS_BLUR_V = 9;
-	static constexpr int COMPOSITE_PASS_RESOLVE = 10;
+	static constexpr int COMPOSITE_PASS_CAS = 6;
+	static constexpr int COMPOSITE_PASS_DOWNSCALE = 7;
+	static constexpr int COMPOSITE_PASS_THRESHOLD = 8;
+	static constexpr int COMPOSITE_PASS_BLUR_H = 9;
+	static constexpr int COMPOSITE_PASS_BLUR_V = 10;
+	static constexpr int COMPOSITE_PASS_RESOLVE = 11;
 	static constexpr int COMPOSITE_TARGET_SCALE_BASE = 4;
-	static constexpr int COMPOSITE_TARGET_SHARP = 10;
-	static constexpr int COMPOSITE_TARGET_THRESHOLD = 11;
-	static constexpr int COMPOSITE_TARGET_BLUR_H = 12;
-	static constexpr int COMPOSITE_TARGET_BLUR_V = 13;
+	static constexpr int COMPOSITE_TARGET_CAS = 10;
+	static constexpr int COMPOSITE_TARGET_SHARP = 11;
+	static constexpr int COMPOSITE_TARGET_THRESHOLD = 12;
+	static constexpr int COMPOSITE_TARGET_BLUR_H = 13;
+	static constexpr int COMPOSITE_TARGET_BLUR_V = 14;
+	// CAS sharpness knob: 0.0 is the least ringing, 1.0 the maximum ringing. Kept
+	// low (AMD default range) so the 2x sharpen never produces white halos.
+	static constexpr float COMPOSITE_CAS_SHARPNESS = 0.25f;
 	struct CompositeProgram {
 		GLuint program = 0;
 		GLint loc_projection = -1;
@@ -137,6 +144,7 @@ private:
 		GLint loc_texSize = -1;
 		GLint loc_outSize = -1;
 		GLint loc_inputSize = -1;
+		GLint loc_sharpness = -1;
 	};
 	std::array<CompositeProgram, COMPOSITE_PASS_COUNT> compositePrograms {};
 	struct CompositeTarget {

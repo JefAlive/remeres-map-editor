@@ -2,6 +2,8 @@
 #define RME_GL_COMPOSITE_SHADERS_H_
 // Generated from libretro shaders: MDAPT v2.8 (Sp00kyFox), Super 2xSaI
 // (Derek Liauw Kie Fa / DOSBox team / guest(r)), crt-hyllian-glow (Hyllian/hunterk).
+// The sharpening pass is AMD FidelityFX Contrast Adaptive Sharpening
+// (CAS 1.20190610), MIT licensed, Copyright (c) 2017-2019 Advanced Micro Devices, Inc.
 // Each fragment shader shares a common vertex stage that emits TEX0/COL0.
 // The ScaleFX-Hybrid, sharpsmoother and old custom bloom sources below are kept
 // for reference but are no longer part of the pass chain (see compositePassSrc).
@@ -2440,6 +2442,62 @@ void main()
 }
 )GLSL";
 
+static const char* const compositeCasSrc = R"GLSL(#version 330
+// AMD FidelityFX Contrast Adaptive Sharpening (CAS 1.20190610, MIT).
+// Sharpen-only (no scaling) path with the default 5-tap cross (no
+// CAS_BETTER_DIAGONALS corners) and green-channel coefficients for all
+// channels, matching the non-packed CasFilter() fast path.
+// Runs on the Super 2xSaI output (already at 2^steps resolution). CAS is a
+// linear filter, so the sRGB source uses the documented gamma 2.0
+// approximation: square on load and sqrt on store.
+uniform sampler2D Texture;
+uniform vec2 TextureSize;
+uniform vec2 OutputSize;
+uniform vec2 InputSize;
+uniform float uSharpness; // 0.0 := least ringing, 1.0 := maximum ringing
+in vec4 TEX0;
+out vec4 FragColor;
+void main()
+{
+	vec2 texel = 1.0 / TextureSize;
+
+	vec4 center = texture(Texture, TEX0.xy);
+	vec3 e = center.rgb;                                                    // center
+	vec3 b = texture(Texture, TEX0.xy + vec2(0.0, -texel.y)).rgb;           // up
+	vec3 d = texture(Texture, TEX0.xy + vec2(-texel.x, 0.0)).rgb;           // left
+	vec3 f = texture(Texture, TEX0.xy + vec2(texel.x, 0.0)).rgb;            // right
+	vec3 h = texture(Texture, TEX0.xy + vec2(0.0, texel.y)).rgb;            // down
+
+	// sRGB -> linear (gamma 2.0 approximation documented for UNORM input).
+	e *= e;
+	b *= b;
+	d *= d;
+	f *= f;
+	h *= h;
+
+	// Soft minimum and maximum of the cross.
+	vec3 mn = min(min(min(d, e), f), min(b, h));
+	vec3 mx = max(max(max(d, e), f), max(b, h));
+
+	// Smooth minimum distance to the signal limit divided by smooth max.
+	vec3 rcpM = 1.0 / max(mx, vec3(1.0 / 255.0));
+	vec3 amp = clamp(min(mn, vec3(1.0) - mx) * rcpM, 0.0, 1.0);
+	amp = sqrt(amp);
+
+	// Negative-lobe sharpening amount (peak in [-1/8, -1/5]).
+	float peak = -1.0 / mix(8.0, 5.0, clamp(uSharpness, 0.0, 1.0));
+	float w = amp.g * peak;
+
+	//  0 w 0
+	//  w 1 w
+	//  0 w 0
+	vec3 sharp = (e + w * (b + d + f + h)) / (1.0 + 4.0 * w);
+
+	// Linear -> sRGB (gamma 2.0 approximation); preserve the source alpha.
+	FragColor = vec4(sqrt(clamp(sharp, 0.0, 1.0)), center.a);
+}
+)GLSL";
+
 static const char* const compositeDownscaleSrc = R"GLSL(#version 330
 // Downscale of the Super 2xSaI chain to the output resolution. The source is
 // bound with GL_NEAREST, so this is a crisp nearest-neighbour resolve.
@@ -2555,7 +2613,7 @@ void main()
 }
 )GLSL";
 
-static const int compositePassCount = 11;
+static const int compositePassCount = 12;
 static const char* const compositePassSrc[compositePassCount] = {
 	compositeMdapt0Src,
 	compositeMdapt1Src,
@@ -2563,6 +2621,7 @@ static const char* const compositePassSrc[compositePassCount] = {
 	compositeMdapt3Src,
 	compositeMdapt4Src,
 	compositeSuper2xSaiSrc,
+	compositeCasSrc,
 	compositeDownscaleSrc,
 	compositeGlowThresholdSrc,
 	compositeGlowBlurHSrc,

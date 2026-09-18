@@ -778,6 +778,7 @@ void GLRenderer::init() {
 		cp.loc_texSize = glGetUniformLocation(cp.program, "TextureSize");
 		cp.loc_outSize = glGetUniformLocation(cp.program, "OutputSize");
 		cp.loc_inputSize = glGetUniformLocation(cp.program, "InputSize");
+		cp.loc_sharpness = glGetUniformLocation(cp.program, "uSharpness");
 	}
 
 	glGenVertexArrays(1, &vao);
@@ -1627,6 +1628,9 @@ void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inp
 	if (p.loc_inputSize >= 0) {
 		glUniform2f(p.loc_inputSize, static_cast<float>(fboData.width), static_cast<float>(fboData.height));
 	}
+	if (p.loc_sharpness >= 0) {
+		glUniform1f(p.loc_sharpness, COMPOSITE_CAS_SHARPNESS);
+	}
 
 	const RetroVertex verts[6] = {
 		{ -1.0f, -1.0f, 0.0f, 1.0f - sourceScaleY, 255, 255, 255, 255 },
@@ -1699,6 +1703,8 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 			stepH *= 2;
 			ensureCompositeTarget(COMPOSITE_TARGET_SCALE_BASE + i, stepW, stepH, false, false);
 		}
+		// CAS output is sampled by the nearest downscale, so it stays nearest too.
+		ensureCompositeTarget(COMPOSITE_TARGET_CAS, scaledW, scaledH, false, false);
 		// Nearest on the scale textures keeps the Super 2xSaI -> output resolve crisp.
 		ensureCompositeTarget(COMPOSITE_TARGET_SHARP, outputWidth, outputHeight, true, false);
 		ensureCompositeTarget(COMPOSITE_TARGET_THRESHOLD, quarterW, quarterH, true, false);
@@ -1706,6 +1712,7 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 		ensureCompositeTarget(COMPOSITE_TARGET_BLUR_V, quarterW, quarterH, true, false);
 
 		if (compositeTargets[0].texture == 0
+			|| compositeTargets[COMPOSITE_TARGET_CAS].texture == 0
 			|| compositeTargets[COMPOSITE_TARGET_SHARP].texture == 0
 			|| compositeTargets[COMPOSITE_TARGET_THRESHOLD].texture == 0
 			|| compositeTargets[COMPOSITE_TARGET_BLUR_H].texture == 0
@@ -1746,8 +1753,10 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 			scaleH = nextH;
 		}
 
-		// Nearest downscale of the 2^steps image to the output resolution.
-		runCompositePass(COMPOSITE_PASS_DOWNSCALE, scaleTex, scaleW, scaleH, 0, 0, 0, COMPOSITE_TARGET_SHARP, outputWidth, outputHeight, 0);
+		// AMD FidelityFX CAS sharpen at the 2^steps Super 2xSaI resolution, then
+		// the nearest downscale of the sharpened image to the output resolution.
+		runCompositePass(COMPOSITE_PASS_CAS, scaleTex, scaleW, scaleH, 0, 0, 0, COMPOSITE_TARGET_CAS, scaleW, scaleH, 0);
+		runCompositePass(COMPOSITE_PASS_DOWNSCALE, compositeTargets[COMPOSITE_TARGET_CAS].texture, scaleW, scaleH, 0, 0, 0, COMPOSITE_TARGET_SHARP, outputWidth, outputHeight, 0);
 
 		// Glow/halation: threshold -> separable blur at quarter resolution.
 		runCompositePass(COMPOSITE_PASS_THRESHOLD, compositeTargets[COMPOSITE_TARGET_SHARP].texture, outputWidth, outputHeight, 0, 0, 0, COMPOSITE_TARGET_THRESHOLD, quarterW, quarterH, 0);
