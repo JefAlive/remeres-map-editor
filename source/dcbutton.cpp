@@ -22,6 +22,7 @@
 #include "dcbutton.h"
 #include "sprites.h"
 #include "gui.h"
+#include "theme.h"
 
 BEGIN_EVENT_TABLE(DCButton, wxPanel)
 EVT_PAINT(DCButton::OnPaint)
@@ -96,16 +97,16 @@ void DCButton::DrawButtonFrame(wxDC &dc, int x, int y, int size_x, int size_y, b
 	static std::unique_ptr<wxPen> shadow_pen;
 
 	if (highlight_pen.get() == nullptr) {
-		highlight_pen.reset(new wxPen(wxColor(0xFF, 0xFF, 0xFF), 1, wxPENSTYLE_SOLID));
+		highlight_pen.reset(new wxPen(Theme::Border(), 1, wxPENSTYLE_SOLID));
 	}
 	if (dark_highlight_pen.get() == nullptr) {
-		dark_highlight_pen.reset(new wxPen(wxColor(0xD4, 0xD0, 0xC8), 1, wxPENSTYLE_SOLID));
+		dark_highlight_pen.reset(new wxPen(Theme::BgHighlight(), 1, wxPENSTYLE_SOLID));
 	}
 	if (light_shadow_pen.get() == nullptr) {
-		light_shadow_pen.reset(new wxPen(wxColor(0x80, 0x80, 0x80), 1, wxPENSTYLE_SOLID));
+		light_shadow_pen.reset(new wxPen(Theme::BgDark(), 1, wxPENSTYLE_SOLID));
 	}
 	if (shadow_pen.get() == nullptr) {
-		shadow_pen.reset(new wxPen(wxColor(0x40, 0x40, 0x40), 1, wxPENSTYLE_SOLID));
+		shadow_pen.reset(new wxPen(Theme::Bg(), 1, wxPENSTYLE_SOLID));
 	}
 
 	dc.SetBrush(*wxBLACK);

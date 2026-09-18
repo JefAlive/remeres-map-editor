@@ -43,6 +43,7 @@ public:
 	virtual void OnEventLoopEnter(wxEventLoopBase* loop);
 	virtual void MacOpenFiles(const wxArrayString &fileNames);
 	virtual int OnExit();
+	virtual int FilterEvent(wxEvent &event);
 	void Unload();
 	void ShutdownServices();
 

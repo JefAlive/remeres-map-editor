@@ -27,6 +27,7 @@
 #include "../common_windows.h"
 #include "../find_item_window.h"
 #include "../dcbutton.h"
+#include "../theme.h"
 #include <wx/statline.h>
 #include <wx/valgen.h>
 #include <wx/aui/aui.h>
@@ -1215,9 +1216,9 @@ public:
 
 		if (showText) {
 			if (isSelected) {
-				dc.SetTextForeground(wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHTTEXT));
+				dc.SetTextForeground(Theme::SelectionFg());
 			} else {
-				dc.SetTextForeground(wxSystemSettings::GetColour(wxSYS_COLOUR_LISTBOXTEXT));
+				dc.SetTextForeground(Theme::Fg());
 			}
 
 			wxString text = wxString(item.text);

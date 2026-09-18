@@ -33,6 +33,7 @@
 #include "common_windows.h"
 #include "positionctrl.h"
 #include "preferences.h"
+#include "theme.h"
 
 #include "iominimap.h"
 
@@ -1253,13 +1254,9 @@ void FindDialogListBox::OnDrawItem(wxDC &dc, const wxRect &rect, size_t n) const
 		}
 
 		if (IsSelected(n)) {
-			if (HasFocus()) {
-				dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-			} else {
-				dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-			}
+			dc.SetTextForeground(Theme::SelectionFg());
 		} else {
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
+			dc.SetTextForeground(Theme::Fg());
 		}
 
 		dc.DrawText(wxstr(brushlist[n]->getName()), rect.GetX() + 40, rect.GetY() + 6);

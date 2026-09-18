@@ -20,6 +20,7 @@
 #include "artprovider.h"
 #include "editor.h"
 #include "gui.h"
+#include "theme.h"
 
 HistoryListBox::HistoryListBox(wxWindow* parent) :
 	wxVListBox(parent, wxID_ANY) {
@@ -54,9 +55,9 @@ void HistoryListBox::OnDrawItem(wxDC &dc, const wxRect &rect, size_t index) cons
 	}
 
 	if (IsSelected(index)) {
-		dc.SetTextForeground(*wxBLUE);
+		dc.SetTextForeground(Theme::SelectionFg());
 	} else {
-		dc.SetTextForeground(*wxBLACK);
+		dc.SetTextForeground(Theme::Fg());
 	}
 
 	const BatchAction* action = actions->getAction(index - 1);

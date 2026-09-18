@@ -19,13 +19,14 @@
 #include "welcome_dialog.h"
 #include "settings.h"
 #include "preferences.h"
+#include "theme.h"
 
 wxDEFINE_EVENT(WELCOME_DIALOG_ACTION, wxCommandEvent);
 
 WelcomeDialog::WelcomeDialog(const wxString &title_text, const wxString &version_text, const wxSize &size, const wxBitmap &rme_logo, const std::vector<wxString> &recent_files) :
 	wxDialog(nullptr, wxID_ANY, "", wxDefaultPosition, size) {
 	Centre();
-	wxColour base_colour = wxColor(250, 250, 250);
+	wxColour base_colour = Theme::Bg();
 	m_welcome_dialog_panel = newd WelcomeDialogPanel(this, GetClientSize(), title_text, version_text, base_colour, wxBitmap(rme_logo.ConvertToImage().Scale(FROM_DIP(this, 48), FROM_DIP(this, 48))), recent_files);
 }
 
@@ -76,15 +77,15 @@ WelcomeDialogPanel::WelcomeDialogPanel(WelcomeDialog* dialog, const wxSize &size
 	m_rme_logo(rme_logo),
 	m_title_text(title_text),
 	m_version_text(version_text),
-	m_text_colour(base_colour.ChangeLightness(40)),
+	m_text_colour(Theme::Fg()),
 	m_background_colour(base_colour) {
 
 	auto* recent_maps_panel = newd RecentMapsPanel(this, dialog, base_colour, recent_files);
 	recent_maps_panel->SetMaxSize(wxSize(size.x / 2, size.y));
-	recent_maps_panel->SetBackgroundColour(base_colour.ChangeLightness(98));
+	recent_maps_panel->SetBackgroundColour(Theme::BgDark());
 
 	wxSize button_size = FROM_DIP(this, wxSize(150, 35));
-	wxColour button_base_colour = base_colour.ChangeLightness(90);
+	wxColour button_base_colour = Theme::BgHighlight();
 
 	int button_pos_center_x = size.x / 4 - button_size.x / 2;
 	int button_pos_center_y = size.y / 2;
@@ -149,7 +150,7 @@ void WelcomeDialogPanel::OnPaint(const wxPaintEvent &event) {
 
 	dc.SetFont(GetFont());
 	wxSize version_size = dc.GetTextExtent(m_version_text);
-	dc.SetTextForeground(m_text_colour.ChangeLightness(110));
+	dc.SetTextForeground(Theme::FgDark());
 	dc.DrawText(m_version_text, wxPoint(header_point.x - version_size.x / 2, header_point.y + header_size.y + 10));
 }
 
@@ -157,9 +158,9 @@ WelcomeDialogButton::WelcomeDialogButton(wxWindow* parent, const wxPoint &pos, c
 	wxPanel(parent, wxID_ANY, pos, size),
 	m_action(wxID_CLOSE),
 	m_text(text),
-	m_text_colour(base_colour.ChangeLightness(40)),
-	m_background(base_colour.ChangeLightness(96)),
-	m_background_hover(base_colour.ChangeLightness(93)),
+	m_text_colour(Theme::Fg()),
+	m_background(Theme::BgHighlight()),
+	m_background_hover(Theme::Border()),
 	m_is_hover(false) {
 	Bind(wxEVT_PAINT, &WelcomeDialogButton::OnPaint, this);
 	Bind(wxEVT_ENTER_WINDOW, &WelcomeDialogButton::OnMouseEnter, this);
@@ -203,10 +204,10 @@ RecentMapsPanel::RecentMapsPanel(wxWindow* parent, WelcomeDialog* dialog, const 
 
 RecentItem::RecentItem(wxWindow* parent, const wxColour &base_colour, const wxString &item_name) :
 	wxPanel(parent, wxID_ANY),
-	m_text_colour(base_colour.ChangeLightness(40)),
-	m_text_colour_hover(base_colour.ChangeLightness(20)),
+	m_text_colour(Theme::FgDark()),
+	m_text_colour_hover(Theme::Blue()),
 	m_item_text(item_name) {
-	SetBackgroundColour(base_colour.ChangeLightness(95));
+	SetBackgroundColour(Theme::BgDark());
 	m_title = newd wxStaticText(this, wxID_ANY, wxFileNameFromPath(m_item_text));
 	m_title->SetFont(GetFont().Bold());
 	m_title->SetForegroundColour(m_text_colour);

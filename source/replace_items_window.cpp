@@ -22,6 +22,7 @@
 #include "gui.h"
 #include "artprovider.h"
 #include "items.h"
+#include "theme.h"
 
 // ============================================================================
 // ReplaceItemsButton
@@ -143,13 +144,9 @@ void ReplaceItemsListBox::OnDrawItem(wxDC &dc, const wxRect &rect, size_t index)
 	}
 
 	if (IsSelected(index)) {
-		if (HasFocus()) {
-			dc.SetTextForeground(wxColor(0xFF, 0xFF, 0xFF));
-		} else {
-			dc.SetTextForeground(wxColor(0x00, 0x00, 0xFF));
-		}
+		dc.SetTextForeground(Theme::SelectionFg());
 	} else {
-		dc.SetTextForeground(wxColor(0x00, 0x00, 0x00));
+		dc.SetTextForeground(Theme::Fg());
 	}
 }
 

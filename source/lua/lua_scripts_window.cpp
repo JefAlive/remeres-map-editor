@@ -19,6 +19,7 @@
 #include "lua_scripts_window.h"
 #include "lua_script_manager.h"
 #include "../gui_ids.h"
+#include "../theme.h"
 
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
@@ -115,8 +116,8 @@ void LuaScriptsWindow::BuildUI() {
 	// Set monospace font for console
 	wxFont consoleFont(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 	console_output->SetFont(consoleFont);
-	console_output->SetBackgroundColour(wxColour(30, 30, 30));
-	console_output->SetForegroundColour(wxColour(200, 200, 200));
+	console_output->SetBackgroundColour(Theme::BgDark());
+	console_output->SetForegroundColour(Theme::Fg());
 
 	mainSizer->Add(console_output, 1, wxEXPAND | wxALL, 2);
 
@@ -147,7 +148,7 @@ void LuaScriptsWindow::RefreshScriptList() {
 
 		// Color based on enabled state
 		if (!script->isEnabled()) {
-			script_list->SetItemTextColour(index, wxColour(128, 128, 128));
+			script_list->SetItemTextColour(index, Theme::Comment());
 		}
 	}
 
@@ -169,9 +170,9 @@ void LuaScriptsWindow::LogMessage(const wxString &message, bool isError) {
 	// Set color based on message type
 	wxTextAttr attr;
 	if (isError) {
-		attr.SetTextColour(wxColour(255, 100, 100)); // Red for errors
+		attr.SetTextColour(Theme::Red()); // Red for errors
 	} else {
-		attr.SetTextColour(wxColour(200, 200, 200)); // Light gray for normal
+		attr.SetTextColour(Theme::Fg()); // Normal text
 	}
 
 	console_output->SetDefaultStyle(attr);
@@ -212,9 +213,9 @@ void LuaScriptsWindow::UpdateScriptState(long index) {
 
 		// Update row text colour to reflect enabled/disabled state
 		if (enabled) {
-			script_list->SetItemTextColour(index, wxSystemSettings::GetColour(wxSYS_COLOUR_LISTBOXTEXT));
+			script_list->SetItemTextColour(index, Theme::Fg());
 		} else {
-			script_list->SetItemTextColour(index, wxColour(128, 128, 128));
+			script_list->SetItemTextColour(index, Theme::Comment());
 		}
 	}
 }

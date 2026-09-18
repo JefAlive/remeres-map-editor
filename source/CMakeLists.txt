@@ -311,6 +311,7 @@ target_sources(
           sprite_appearances.cpp
           stb_truetype_impl.cpp
           table_brush.cpp
+          theme.cpp
           templatemap76-74.cpp
           templatemap81.cpp
           templatemap854.cpp

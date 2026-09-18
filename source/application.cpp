@@ -29,6 +29,7 @@
 #include "main_menubar.h"
 #include "updater.h"
 #include "artprovider.h"
+#include "theme.h"
 
 #include "materials.h"
 #include "map.h"
@@ -114,6 +115,9 @@ bool Application::OnInit() {
 	wxAppConsole::SetInstance(this);
 	wxArtProvider::Push(new ArtProvider());
 
+	// Request the platform dark appearance and install the editor theme.
+	Theme::Initialize();
+
 	// Load some internal stuff
 	g_settings.load();
 	g_gui.LoadHotkeys();
@@ -166,6 +170,9 @@ bool Application::OnInit() {
 
 	// Load palette
 	g_gui.LoadPerspective();
+
+	// Colour the main frame and all palettes that were just created.
+	Theme::Apply(g_gui.root);
 
 	// Initialize Lua scripting system
 	if (!g_luaScripts.initialize()) {
@@ -314,6 +321,20 @@ int Application::OnExit() {
 	wxDELETE(m_single_instance_checker);
 #endif
 	return 1;
+}
+
+int Application::FilterEvent(wxEvent& event) {
+	// Theme dialogs and floating palettes as they are shown, so windows
+	// created after the initial theme pass still pick up the palette.
+	if (event.GetEventType() == wxEVT_SHOW) {
+		wxShowEvent& show_event = static_cast<wxShowEvent&>(event);
+		if (show_event.IsShown()) {
+			if (wxWindow* window = wxDynamicCast(show_event.GetEventObject(), wxWindow)) {
+				Theme::Apply(window);
+			}
+		}
+	}
+	return wxApp::FilterEvent(event);
 }
 
 void Application::ShutdownServices() {
