@@ -585,8 +585,19 @@ bool GUI::LoadMap(const FileName &fileName) {
 	FitViewToMap(mapTab);
 	root->UpdateMenubar();
 
+	// Center a freshly loaded map on the first town (lowest id) it contains. Maps
+	// without a valid town fall back to the last saved cursor position instead.
+	bool centeredOnTown = false;
+	if (Map* map = mapTab->GetMap(); map != nullptr && map->towns.count() > 0) {
+		const Town* town = map->towns.begin()->second;
+		if (town != nullptr && town->getTemplePosition().isValid()) {
+			mapTab->SetScreenCenterPosition(town->getTemplePosition());
+			centeredOnTown = true;
+		}
+	}
+
 	std::string path = g_settings.getString(Config::RECENT_EDITED_MAP_PATH);
-	if (!path.empty()) {
+	if (!centeredOnTown && !path.empty()) {
 		FileName file(path);
 		if (file == fileName) {
 			std::istringstream stream(g_settings.getString(Config::RECENT_EDITED_MAP_POSITION));
