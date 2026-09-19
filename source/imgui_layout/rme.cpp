@@ -38,11 +38,12 @@ void Rme::Draw(wxWindow* canvas)
             /// @separator
 
             /// @begin Child
-            vb01.BeginLayout();
-            hb01.BeginLayout();
-            ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-            if (ImGui::BeginChild("child1", { 300, vb01.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
-            {
+                vb01.BeginLayout();
+                hb01.BeginLayout();
+                RmeLayout::drawPanelSizers();
+                ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
+                if (ImGui::BeginChild("child1", { RmeLayout::leftPanelWidth(), vb01.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
+                {
                 /// @separator
 
                 /// @begin TabBar
@@ -379,7 +380,7 @@ void Rme::Draw(wxWindow* canvas)
             }
             ImGui::EndChild();
             vb01.AddSize(0 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::Stretch(1.0f));
-            hb01.AddSize(0 * ImGui::GetStyle().ItemSpacing.x, 300);
+            hb01.AddSize(0 * ImGui::GetStyle().ItemSpacing.x, RmeLayout::leftPanelWidth());
             /// @end Child
 
             /// @begin Child
@@ -963,7 +964,7 @@ void Rme::Draw(wxWindow* canvas)
 
             /// @begin Child
             ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-            if (ImGui::BeginChild("child25", { 350, vb01.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings))
+            if (ImGui::BeginChild("child25", { RmeLayout::rightPanelWidth(), vb01.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings))
             {
                 /// @separator
 
@@ -1399,7 +1400,7 @@ void Rme::Draw(wxWindow* canvas)
             }
             ImGui::EndChild();
             vb01.UpdateSize(0, ImRad::VBox::Stretch(1.0f));
-            hb01.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, 350);
+            hb01.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, RmeLayout::rightPanelWidth());
             /// @end Child
 
             /// @separator

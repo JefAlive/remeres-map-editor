@@ -45,4 +45,18 @@ namespace RmeLayout {
 	void setMapViewport(float x, float y, float w, float h);
 	void addMapKeepout(float x, float y, float w, float h);
 
+	// Draws the transparent rectangle where the live map shows (the spot the old
+	// mapeditor.png placeholder occupied) and records it as the map viewport.
+	// Everything outside it in the map area is opaque.
+	void drawMapViewport(float width, float height);
+
+	// Current widths of the [left | center | right] row panels, updated by
+	// drawPanelSizers() and read by the layout when sizing the panels.
+	float leftPanelWidth();
+	float rightPanelWidth();
+
+	// Draggable vertical dividers at the left/right panel seams. Call once per
+	// frame at the start of the row layout, before any panel child is drawn.
+	void drawPanelSizers();
+
 } // namespace RmeLayout

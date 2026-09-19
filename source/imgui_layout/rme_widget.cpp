@@ -6,6 +6,7 @@
 #include "imgui_layout/rme.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_impl_opengl3.h>
 
 #include "editor.h"
@@ -13,6 +14,7 @@
 #include "map.h"
 #include "tile.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cctype>
 #include <cstdint>
@@ -48,6 +50,15 @@ bool s_overlay_active = true;
 	};
 	Rect s_map_viewport{ 0, 0, 0, 0 };
 	std::vector<Rect> s_map_keepouts;
+
+	// Widths of the [left | center | right] row panels, resized by the draggable
+	// dividers drawn in drawPanelSizers(). Runtime state for now.
+	constexpr float kPanelThickness = 6.0f;
+	constexpr float kPanelMinLeftWidth = 220.0f;
+	constexpr float kPanelMinRightWidth = 280.0f;
+	constexpr float kPanelMinCenterWidth = 160.0f;
+	float s_left_panel_width = 300.0f;
+	float s_right_panel_width = 350.0f;
 
 	bool pointInRect(const Rect& r, float px, float py) {
 		return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
@@ -274,6 +285,20 @@ void setMapViewport(float x, float y, float w, float h) {
 	s_map_viewport = { x, y, w, h };
 }
 
+void drawMapViewport(float width, float height) {
+	const ImVec2 pos = ImGui::GetCursorScreenPos();
+	const ImVec2 avail = ImGui::GetContentRegionAvail();
+	const float w = std::min(width, avail.x);
+	const float h = std::min(height, avail.y);
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+	if (ImGui::BeginChild("child10map", { w, h }, ImGuiChildFlags_None, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar)) {
+		// The map painted by MapDrawer on the canvas shows through this child only.
+	}
+	ImGui::EndChild();
+	ImGui::PopStyleColor();
+	setMapViewport(pos.x, pos.y, w, h);
+}
+
 void addMapKeepout(float x, float y, float w, float h) {
 	s_map_keepouts.push_back({ x, y, w, h });
 }
@@ -320,6 +345,52 @@ void DrawMinimap(float availWidth, float availHeight) {
 
 bool isOverlayActive() {
 	return s_overlay_active;
+}
+
+float leftPanelWidth() {
+	return s_left_panel_width;
+}
+
+float rightPanelWidth() {
+	return s_right_panel_width;
+}
+
+void drawPanelSizers() {
+	const ImVec2 avail = ImGui::GetContentRegionAvail();
+	if (avail.x <= 0.0f || avail.y <= 0.0f) {
+		return;
+	}
+	const ImVec2 row_pos = ImGui::GetCursorScreenPos();
+
+	// Keep the stored panel widths inside the current row (the window may have
+	// shrunk under them).
+	s_left_panel_width =
+		std::clamp(s_left_panel_width, kPanelMinLeftWidth, avail.x - kPanelMinCenterWidth - kPanelMinRightWidth);
+	s_right_panel_width =
+		std::clamp(s_right_panel_width, kPanelMinRightWidth, avail.x - s_left_panel_width - kPanelMinCenterWidth);
+
+	// Divider between the left panel and the rest of the row.
+	const ImRect left_bb{
+		ImVec2(row_pos.x + s_left_panel_width, row_pos.y),
+		ImVec2(row_pos.x + s_left_panel_width + kPanelThickness, row_pos.y + avail.y)
+	};
+	float left_size1 = s_left_panel_width;
+	float left_size2 = avail.x - left_size1 - kPanelThickness;
+	ImGui::SplitterBehavior(left_bb, ImGui::GetID("##RmeSplitLeft"), ImGuiAxis_X, &left_size1, &left_size2,
+		kPanelMinLeftWidth, kPanelMinCenterWidth + kPanelMinRightWidth, 8.0f, 0.0f, 0);
+	s_left_panel_width = left_size1;
+
+	// Divider between the center area and the right panel.
+	const float left_of_right = avail.x - s_right_panel_width - kPanelThickness;
+	const ImRect right_bb{
+		ImVec2(row_pos.x + left_of_right, row_pos.y),
+		ImVec2(row_pos.x + left_of_right + kPanelThickness, row_pos.y + avail.y)
+	};
+	float right_size1 = left_of_right;
+	float right_size2 = s_right_panel_width;
+	ImGui::SplitterBehavior(right_bb, ImGui::GetID("##RmeSplitRight"), ImGuiAxis_X, &right_size1, &right_size2,
+		kPanelMinCenterWidth + kPanelMinLeftWidth, kPanelMinRightWidth, 8.0f, 0.0f, 0);
+	s_right_panel_width = right_size2;
 }
 
 } // namespace RmeLayout
