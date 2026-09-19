@@ -24,4 +24,25 @@ namespace RmeLayout {
 	bool wantsCaptureMouse();
 	bool wantsCaptureKeyboard();
 
+	// Renders the live minimap of the current editor inside the current ImGui
+	// window, aspect-fitted within the given available space. Call it in the Rme
+	// layout wherever the minimap should appear.
+	void DrawMinimap(float availWidth, float availHeight);
+
+	// The always-on Rme layout is active and replaces the legacy status footer
+	// and overlay scrollbars; callers should skip that drawing when true.
+	bool isOverlayActive();
+
+	// Hit-testing for the live map viewport. The Rme layout records the screen
+	// rect of the transparent center (where the live map shows) and any keepout
+	// rects (interactive overlays like the floor buttons). MapCanvas asks this
+	// before deciding whether an ImGui capture should swallow a mouse event.
+	bool isMapPoint(int x, int y);
+
+	// Recording the map viewport / keepout rects, called from the Rme layout
+	// while it draws each frame.
+	void clearMapRects();
+	void setMapViewport(float x, float y, float w, float h);
+	void addMapKeepout(float x, float y, float w, float h);
+
 } // namespace RmeLayout

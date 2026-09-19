@@ -2,6 +2,7 @@
 // visit https://github.com/tpecholt/imrad
 
 #include "rme.h"
+#include "rme_widget.h"
 
 Rme g_rme;
 
@@ -13,11 +14,16 @@ void Rme::Draw(wxWindow* canvas)
     /// @unit px
     /// @begin TopWindow
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    // Transparent root window: the live map painted on the full canvas shows
+    // through everywhere an opaque panel is not drawn, and mouse input falls
+    // through to the editor wherever no layout widget is hovered.
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::SetNextWindowPos({ 0, 0 });
     ImGui::SetNextWindowSize({ (float)canvas->GetClientSize().GetWidth(), (float)canvas->GetClientSize().GetHeight() });
     bool tmpOpen;
-    if (ImGui::Begin("###Rme", &tmpOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar))
+    if (ImGui::Begin("###Rme", &tmpOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMouseInputs))
     {
+        RmeLayout::clearMapRects();
         /// @separator
 
         // TODO: Add Draw calls of dependent popup windows here
@@ -26,6 +32,7 @@ void Rme::Draw(wxWindow* canvas)
         vb1.BeginLayout();
         hb1.BeginLayout();
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 0, 0 });
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
         if (ImGui::BeginChild("child1", { hb1.GetSize(), vb1.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings))
         {
             /// @separator
@@ -377,7 +384,7 @@ void Rme::Draw(wxWindow* canvas)
 
             /// @begin Child
             ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, 0x00ffffff);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
             if (ImGui::BeginChild("child5", { hb01.GetSize(), vb01.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings))
             {
                 /// @separator
@@ -444,16 +451,14 @@ void Rme::Draw(wxWindow* canvas)
                 /// @begin Child
                 hb012.BeginLayout();
                 ImRad::Spacing(-1);
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
-                if (ImGui::BeginChild("child10", { hb012.GetSize(), vb011.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+                if (ImGui::BeginChild("child10", { hb012.GetSize(), vb011.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                 {
+                    RmeLayout::setMapViewport(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
                     /// @separator
 
-                    /// @begin Image
-                    if (!value17)
-                        value17 = ImRad::LoadTextureFromFile("C:/Users/T-Gamer/Downloads/mapeditor.png");
-                    ImGui::Image(value17.id, { (float)value17.w, (float)value17.h }, { -0, -0 }, { 1, 1 }); //StretchPolicy::FitOut
-                    /// @end Image
+                    // Transparent map viewport: the map painted by MapDrawer shows
+                    // through here and mouse events fall through to the editor.
 
                     /// @separator
                     auto cpos10 = ImRad::GetCursorData();
@@ -463,20 +468,16 @@ void Rme::Draw(wxWindow* canvas)
                     ImGui::SetCursorScreenPos({ ImRad::GetParentInnerRect().GetCenter().x-224, ImRad::GetParentInnerRect().Max.y-68 }); //overlayPos=AlignHCenter|AlignBottom,-224,-68
                     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 0, 0 });
                     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg));
-                    if (ImGui::BeginChild("child10", { 432, 48 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
+                    if (ImGui::BeginChild("child10", { 432, 48 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                     {
                         /// @separator
 
                         /// @begin Child
-                        if (ImGui::BeginChild("child10", { 48, 48 }, ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child10", { 48, 48 }, ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
 
-                            /// @begin Image
-                            if (!value21)
-                                value21 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/1.png");
-                            ImGui::Image(value21.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
+                            // Empty hotbar slot: favorites will be shown here.
 
                             /// @separator
                             auto cpos10 = ImRad::GetCursorData();
@@ -496,15 +497,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child11", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child11", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value22)
-                                value22 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/2.png");
-                            ImGui::Image(value22.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos11 = ImRad::GetCursorData();
@@ -524,15 +519,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child12", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child12", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value24)
-                                value24 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/3.png");
-                            ImGui::Image(value24.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos12 = ImRad::GetCursorData();
@@ -552,15 +541,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child13", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child13", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value25)
-                                value25 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/4.png");
-                            ImGui::Image(value25.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos13 = ImRad::GetCursorData();
@@ -580,15 +563,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child14", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child14", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value26)
-                                value26 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/5.png");
-                            ImGui::Image(value26.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos14 = ImRad::GetCursorData();
@@ -608,15 +585,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child15", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child15", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value27)
-                                value27 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/6.png");
-                            ImGui::Image(value27.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos15 = ImRad::GetCursorData();
@@ -636,15 +607,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child16", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child16", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value28)
-                                value28 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/7.png");
-                            ImGui::Image(value28.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos16 = ImRad::GetCursorData();
@@ -664,15 +629,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child17", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child17", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value29)
-                                value29 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/8.png");
-                            ImGui::Image(value29.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos17 = ImRad::GetCursorData();
@@ -692,15 +651,9 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Child
                         ImGui::SameLine(0, 0 * ImGui::GetStyle().ItemSpacing.x);
-                        if (ImGui::BeginChild("child18", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar))
+                        if (ImGui::BeginChild("child18", { 48, 48 }, ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                         {
                             /// @separator
-
-                            /// @begin Image
-                            if (!value30)
-                                value30 = ImRad::LoadTextureFromFile("C:/Users/T-GAMER/Downloads/TibiaFankit/Emotes/DemonShield/56x56/9.png");
-                            ImGui::Image(value30.id, { 48, 48 }, { 0, 0 }, { 1, 1 }); //StretchPolicy::Scale
-                            /// @end Image
 
                             /// @separator
                             auto cpos18 = ImRad::GetCursorData();
@@ -730,6 +683,7 @@ void Rme::Draw(wxWindow* canvas)
                     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg));
                     if (ImGui::BeginChild("child20", { 24, 360 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
                     {
+                        RmeLayout::addMapKeepout(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
                         /// @separator
 
                         /// @begin Button
@@ -845,7 +799,7 @@ void Rme::Draw(wxWindow* canvas)
                     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 170, 15 });
                     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0);
                     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg));
-                    if (ImGui::BeginChild("child21", { 480, 48 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings))
+                    if (ImGui::BeginChild("child21", { 480, 48 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMouseInputs))
                     {
                         /// @separator
 
@@ -1070,15 +1024,13 @@ void Rme::Draw(wxWindow* canvas)
                 {
                     /// @separator
 
-                    /// @begin Image
+                    /// @begin Content
                     vb0211.BeginLayout();
                     hb0211.BeginLayout();
-                    if (!value1)
-                        value1 = ImRad::LoadTextureFromFile("C:/Users/T-Gamer/Downloads/minimap.png");
-                    ImGui::Image(value1.id, { hb0211.GetSize(), vb0211.GetSize() }, { 0, 0 }, { 1, 1 }); //StretchPolicy::FitIn
+                    RmeLayout::DrawMinimap(hb0211.GetSize(), vb0211.GetSize());
                     vb0211.AddSize(0 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::Stretch(1.0f));
                     hb0211.AddSize(0 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::Stretch(1.0f));
-                    /// @end Image
+                    /// @end Content
 
                     /// @separator
                 }
@@ -1453,6 +1405,7 @@ void Rme::Draw(wxWindow* canvas)
             /// @separator
         }
         ImGui::EndChild();
+        ImGui::PopStyleColor();
         ImGui::PopStyleVar();
         vb1.AddSize(0 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::Stretch(1.0f));
         hb1.AddSize(0 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::Stretch(1.0f));
@@ -1461,6 +1414,7 @@ void Rme::Draw(wxWindow* canvas)
         /// @separator
     }
     ImGui::End();
+    ImGui::PopStyleColor();
     ImGui::PopStyleVar();
     /// @end TopWindow
 }

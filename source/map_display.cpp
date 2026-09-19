@@ -57,7 +57,7 @@
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 EVT_KEY_DOWN(MapCanvas::OnKeyDown)
-EVT_KEY_DOWN(MapCanvas::OnKeyUp)
+EVT_KEY_UP(MapCanvas::OnKeyUp)
 
 // Mouse events
 EVT_MOTION(MapCanvas::OnMouseMove)
@@ -272,7 +272,10 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 	// Clean unused textures
 	g_gui.gfx.garbageCollection();
 
-	if (g_gui.IsRenderingEnabled()) {
+	// The always-on Rme layout (with its own bottom toolbar) replaces the
+	// legacy status footer and overlay scrollbars while it is active, so skip
+	// that extra ImGui frame and its geometry work.
+	if (g_gui.IsRenderingEnabled() && !RmeLayout::isOverlayActive()) {
 		// Compute overlay scrollbar geometry
 		int cw, ch;
 		GetClientSize(&cw, &ch);
@@ -521,7 +524,7 @@ void MapCanvas::UpdateZoomStatus() {
 
 void MapCanvas::OnMouseMove(wxMouseEvent &event) {
 	RmeLayout::forwardMouseMove(event.GetX(), event.GetY());
-	if (RmeLayout::wantsCaptureMouse()) {
+	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		return;
 	}
 	// Handle overlay scrollbar drag
@@ -701,7 +704,7 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(0, true);
-	if (RmeLayout::wantsCaptureMouse()) {
+	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		return;
 	}
 	OnMouseActionClick(event);
@@ -709,7 +712,7 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(0, true);
-	if (RmeLayout::wantsCaptureMouse()) {
+	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		return;
 	}
 	if (!g_settings.getInteger(Config::DOUBLECLICK_PROPERTIES)) {
@@ -765,7 +768,7 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseCenterClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(2, true);
-	if (RmeLayout::wantsCaptureMouse()) {
+	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		return;
 	}
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
@@ -786,7 +789,7 @@ void MapCanvas::OnMouseCenterRelease(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseRightClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(1, true);
-	if (RmeLayout::wantsCaptureMouse()) {
+	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		return;
 	}
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
@@ -1789,7 +1792,7 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
 
 void MapCanvas::OnWheel(wxMouseEvent &event) {
 	RmeLayout::forwardMouseWheel(event.GetWheelRotation());
-	if (RmeLayout::wantsCaptureMouse()) {
+	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		return;
 	}
 	if (event.ControlDown()) {

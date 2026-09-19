@@ -46,22 +46,11 @@ private:
     /// @begin impl
     void ResetLayout();
 
-    ImRad::Texture value1;
     ImRad::Texture value2;
     float value3 = 100;
-    ImRad::Texture value17;
     ImRad::Texture value18;
     ImRad::Texture value20;
-    ImRad::Texture value21;
-    ImRad::Texture value22;
     ImRad::Texture value23;
-    ImRad::Texture value24;
-    ImRad::Texture value25;
-    ImRad::Texture value26;
-    ImRad::Texture value27;
-    ImRad::Texture value28;
-    ImRad::Texture value29;
-    ImRad::Texture value30;
     ImRad::Texture value31;
     ImRad::Texture value32;
     ImRad::Texture value33;
