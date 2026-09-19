@@ -36,6 +36,7 @@
 #include "browse_tile_window.h"
 
 #include "gl_imgui_overlay.h"
+#include "imgui_layout/rme_widget.h"
 #include "canvas_overlay.h"
 
 #include "main_menubar.h"
@@ -311,6 +312,10 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 		);
 	}
 
+	// ImRAD-generated editor layout: always-on overlay replacing the map-facing
+	// UI. Drawn last so it covers the status footer and map canvas.
+	RmeLayout::Render(this);
+
 	// Swap buffer
 	SwapBuffers();
 
@@ -515,6 +520,10 @@ void MapCanvas::UpdateZoomStatus() {
 }
 
 void MapCanvas::OnMouseMove(wxMouseEvent &event) {
+	RmeLayout::forwardMouseMove(event.GetX(), event.GetY());
+	if (RmeLayout::wantsCaptureMouse()) {
+		return;
+	}
 	// Handle overlay scrollbar drag
 	if (scrollbar_dragging_v || scrollbar_dragging_h) {
 		int mx = event.GetX();
@@ -686,14 +695,23 @@ void MapCanvas::OnMouseMove(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseLeftRelease(wxMouseEvent &event) {
+	RmeLayout::forwardMouseButton(0, false);
 	OnMouseActionRelease(event);
 }
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
+	RmeLayout::forwardMouseButton(0, true);
+	if (RmeLayout::wantsCaptureMouse()) {
+		return;
+	}
 	OnMouseActionClick(event);
 }
 
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
+	RmeLayout::forwardMouseButton(0, true);
+	if (RmeLayout::wantsCaptureMouse()) {
+		return;
+	}
 	if (!g_settings.getInteger(Config::DOUBLECLICK_PROPERTIES)) {
 		return;
 	}
@@ -746,6 +764,10 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseCenterClick(wxMouseEvent &event) {
+	RmeLayout::forwardMouseButton(2, true);
+	if (RmeLayout::wantsCaptureMouse()) {
+		return;
+	}
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
 		OnMousePropertiesClick(event);
 	} else {
@@ -754,6 +776,7 @@ void MapCanvas::OnMouseCenterClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseCenterRelease(wxMouseEvent &event) {
+	RmeLayout::forwardMouseButton(2, false);
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
 		OnMousePropertiesRelease(event);
 	} else {
@@ -762,6 +785,10 @@ void MapCanvas::OnMouseCenterRelease(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseRightClick(wxMouseEvent &event) {
+	RmeLayout::forwardMouseButton(1, true);
+	if (RmeLayout::wantsCaptureMouse()) {
+		return;
+	}
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
 		OnMouseCameraClick(event);
 	} else {
@@ -770,6 +797,7 @@ void MapCanvas::OnMouseRightClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseRightRelease(wxMouseEvent &event) {
+	RmeLayout::forwardMouseButton(1, false);
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
 		OnMouseCameraRelease(event);
 	} else {
@@ -1760,6 +1788,10 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnWheel(wxMouseEvent &event) {
+	RmeLayout::forwardMouseWheel(event.GetWheelRotation());
+	if (RmeLayout::wantsCaptureMouse()) {
+		return;
+	}
 	if (event.ControlDown()) {
 		static double diff = 0.0;
 		diff += event.GetWheelRotation();
@@ -1840,6 +1872,11 @@ void MapCanvas::OnGainMouse(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnKeyDown(wxKeyEvent &event) {
+	RmeLayout::forwardKey(event.GetKeyCode(), event.GetUnicodeKey(), true,
+						  event.ControlDown(), event.ShiftDown(), event.AltDown());
+	if (RmeLayout::wantsCaptureKeyboard()) {
+		return;
+	}
 	MapWindow* window = GetMapWindow();
 
 	// WASD map panning and Q/E floor navigation take priority over other
@@ -2384,6 +2421,8 @@ bool MapCanvas::DispatchMenuShortcut(wxKeyEvent &event) {
 #endif
 
 void MapCanvas::OnKeyUp(wxKeyEvent &event) {
+	RmeLayout::forwardKey(event.GetKeyCode(), event.GetUnicodeKey(), false,
+						  event.ControlDown(), event.ShiftDown(), event.AltDown());
 	keyCode = WXK_NONE;
 }
 

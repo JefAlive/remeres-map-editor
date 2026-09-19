@@ -179,6 +179,9 @@ endif()
 if(SPEED_UP_BUILD_UNITY)
   set_target_properties(${PROJECT_NAME} PROPERTIES UNITY_BUILD ON)
   set_source_files_properties(gl_renderer.cpp gl_imgui_overlay.cpp
+                              imgui_layout/rme.cpp
+                              imgui_layout/rme_textures.cpp
+                              imgui_layout/rme_widget.cpp
                               PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
   log_option_enabled("Build unity for speed up compilation")
 else()
@@ -326,7 +329,10 @@ target_sources(
           waypoints.cpp
           welcome_dialog.cpp
           zone_brush.cpp
-          zones.cpp)
+          zones.cpp
+          imgui_layout/rme.cpp
+          imgui_layout/rme_textures.cpp
+          imgui_layout/rme_widget.cpp)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   set_source_files_properties(
