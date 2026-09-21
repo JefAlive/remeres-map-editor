@@ -866,6 +866,11 @@ void GLRenderer::shutdown() {
 		return;
 	}
 	destroyFBO();
+	if (surfaceData.fbo != 0) {
+		glDeleteFramebuffers(1, &surfaceData.fbo);
+		glDeleteTextures(1, &surfaceData.texture);
+		surfaceData = {};
+	}
 	if (program) {
 		glDeleteProgram(program);
 		program = 0;
@@ -1459,6 +1464,61 @@ void GLRenderer::destroyFBO() {
 	fboData.smooth = false;
 }
 
+void GLRenderer::ensureMapSurface(int w, int h) {
+	if (w <= 0 || h <= 0) {
+		return;
+	}
+	if (surfaceData.fbo != 0 && surfaceData.width == w && surfaceData.height == h) {
+		return;
+	}
+	if (surfaceData.fbo != 0) {
+		glDeleteFramebuffers(1, &surfaceData.fbo);
+		glDeleteTextures(1, &surfaceData.texture);
+		surfaceData.fbo = 0;
+		surfaceData.texture = 0;
+	}
+
+	glGenFramebuffers(1, &surfaceData.fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, surfaceData.fbo);
+
+	glGenTextures(1, &surfaceData.texture);
+	glBindTexture(GL_TEXTURE_2D, surfaceData.texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	// Nearest keeps the pixel-art scene crisp when the layout scales it.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, surfaceData.texture, 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		spdlog::error("[GLRenderer::ensureMapSurface] Framebuffer incomplete");
+		glDeleteTextures(1, &surfaceData.texture);
+		glDeleteFramebuffers(1, &surfaceData.fbo);
+		surfaceData.fbo = 0;
+		surfaceData.texture = 0;
+	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	surfaceData.width = w;
+	surfaceData.height = h;
+	surfaceData.smooth = false;
+}
+
+void GLRenderer::beginMapSurface() {
+	if (surfaceData.fbo != 0) {
+		glBindFramebuffer(GL_FRAMEBUFFER, surfaceData.fbo);
+		glViewport(0, 0, surfaceData.width, surfaceData.height);
+	}
+}
+
+void GLRenderer::endMapSurface() {
+	if (surfaceData.fbo != 0) {
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+}
+
 void GLRenderer::beginFBO() {
 	if (fboData.fbo != 0) {
 		glBindFramebuffer(GL_FRAMEBUFFER, fboData.fbo);
@@ -1562,14 +1622,14 @@ void GLRenderer::destroyCompositeTargets() {
 	compositeCacheSteps = 0;
 }
 
-void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX, float sourceScaleY, int screenX, int screenY) {
+void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX, float sourceScaleY, int screenX, int screenY, GLuint screenFbo) {
 	auto &p = compositePrograms[pass];
 	if (p.program == 0) {
 		return;
 	}
 
 	if (targetIndex < 0) {
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, screenFbo);
 	} else {
 		glBindFramebuffer(GL_FRAMEBUFFER, compositeFbo);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, compositeTargets[targetIndex].texture, 0);
@@ -1648,12 +1708,16 @@ void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inp
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY, int viewportX, int viewportY) {
+void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY, int viewportX, int viewportY, GLuint targetFbo) {
 	if (fboData.fbo == 0 || !hasComposite()) {
 		return;
 	}
 	if (outputWidth <= 0 || outputHeight <= 0) {
 		return;
+	}
+	if (targetFbo != 0) {
+		viewportX = 0;
+		viewportY = 0;
 	}
 
 	const int nativeW = fboData.width;
@@ -1773,7 +1837,7 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 		return;
 	}
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
 	glViewport(viewportX, viewportY, outputWidth, outputHeight);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1781,9 +1845,9 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 	// Glow resolve (sharp + P22-tinted halation) to the screen, restoring the map
 	// alpha so the editor background shows through transparent areas.
 	runCompositePass(COMPOSITE_PASS_RESOLVE, compositeTargets[COMPOSITE_TARGET_BLUR_V].texture, quarterW, quarterH,
-		compositeTargets[COMPOSITE_TARGET_SHARP].texture, 0, 0, -1, outputWidth, outputHeight, fboData.texture, sourceScaleX, sourceScaleY, viewportX, viewportY);
+		compositeTargets[COMPOSITE_TARGET_SHARP].texture, 0, 0, -1, outputWidth, outputHeight, fboData.texture, sourceScaleX, sourceScaleY, viewportX, viewportY, targetFbo);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
 	glViewport(viewportX, viewportY, outputWidth, outputHeight);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, 0);

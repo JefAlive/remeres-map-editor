@@ -219,6 +219,18 @@ public:
 		return options;
 	}
 
+	// The resolved map scene lives in a persistent offscreen surface; the layout
+	// presents it via ImGui::Image so the map never touches the canvas backbuffer.
+	GLuint getMapSurfaceTexture() const {
+		return renderer->getMapSurfaceTexture();
+	}
+	int getMapSurfaceWidth() const {
+		return renderer->getMapSurfaceWidth();
+	}
+	int getMapSurfaceHeight() const {
+		return renderer->getMapSurfaceHeight();
+	}
+
 protected:
 	void BlitItem(int &screenx, int &screeny, const Tile* tile, const Item* item, bool ephemeral = false, int red = 255, int green = 255, int blue = 255, int alpha = 255);
 	void BlitItem(int &screenx, int &screeny, const Position &pos, const Item* item, bool ephemeral = false, int red = 255, int green = 255, int blue = 255, int alpha = 255);

@@ -318,6 +318,8 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 
 		drawer->SetupVars();
 		drawer->SetupGL();
+		// The map is resolved into an offscreen surface; the ImGui layout
+		// presents it as a texture (RmeLayout::DrawLiveMap).
 		drawer->Draw();
 
 		if (screenshot_buffer) {
@@ -378,7 +380,7 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 	if (layoutStarted) {
 		RmeLayout::End();
 	} else {
-		RmeLayout::Render(this);
+		// RmeLayout::Render(this);
 	}
 
 	// Swap buffer

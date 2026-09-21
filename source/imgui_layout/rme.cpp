@@ -455,12 +455,10 @@ void Rme::Draw(wxWindow* canvas)
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
                 if (ImGui::BeginChild("child10", { hb012.GetSize(), vb011.GetSize() }, ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                 {
-                    RmeLayout::setMapViewport(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
-                    /// @separator
-
-                    // Transparent map viewport: the map painted by MapDrawer shows
-                    // through here and mouse events fall through to the editor.
-
+                    // The live map: MapDrawer renders the scene into an offscreen
+                    // surface and this presents it as a texture inside the layout,
+                    // recording the drawn rect as the map viewport.
+                    RmeLayout::DrawLiveMap(canvas, hb012.GetSize(), vb011.GetSize());
                     /// @separator
                     auto cpos10 = ImRad::GetCursorData();
                     ImGui::PushClipRect(ImRad::GetParentInnerRect().Min, ImRad::GetParentInnerRect().Max, false);

@@ -12,6 +12,8 @@
 #include "editor.h"
 #include "gui.h"
 #include "map.h"
+#include "map_display.h"
+#include "map_drawer.h"
 #include "tile.h"
 
 #include <algorithm>
@@ -322,6 +324,63 @@ void drawMapViewport(float width, float height) {
 
 void addMapKeepout(float x, float y, float w, float h) {
 	s_map_keepouts.push_back({ x, y, w, h });
+}
+
+void DrawLiveMap(wxWindow* canvas, float availWidth, float availHeight) {
+	const ImVec2 pos = ImGui::GetCursorScreenPos();
+
+	GLuint tex = 0;
+	int texW = 0;
+	int texH = 0;
+	if (canvas) {
+		MapCanvas* map_canvas = dynamic_cast<MapCanvas*>(canvas);
+		MapDrawer* drawer = map_canvas ? map_canvas->GetDrawer() : nullptr;
+		if (drawer) {
+			tex = drawer->getMapSurfaceTexture();
+			texW = drawer->getMapSurfaceWidth();
+			texH = drawer->getMapSurfaceHeight();
+		}
+	}
+
+	if (!tex || texW <= 0 || texH <= 0) {
+		// The surface is not rendered yet (first frame / no scene): reserve the
+		// space and record the rect so the camera and input stay consistent.
+		ImGui::Dummy({ availWidth, availHeight });
+		setMapViewport(pos.x, pos.y, availWidth, availHeight);
+		return;
+	}
+
+	const float scale = ImGui::GetIO().DisplayFramebufferScale.x > 0.0f ? ImGui::GetIO().DisplayFramebufferScale.x : 1.0f;
+	const float natW = static_cast<float>(texW) / scale;
+	const float natH = static_cast<float>(texH) / scale;
+
+	// The viewport is the whole available region so the surface regenerates to
+	// the region's aspect on the next frame; the transient frame in between is
+	// filled with a uniform aspect-fit so the map never distorts.
+	float k = std::min(availWidth / natW, availHeight / natH);
+	// The surface already matches the region in steady state (k == 1); never
+	// upscale beyond that so the pixel art stays crisp.
+	k = std::min(k, 1.0f);
+	if (k <= 0.0f) {
+		setMapViewport(pos.x, pos.y, availWidth, availHeight);
+		return;
+	}
+	const float drawW = natW * k;
+	const float drawH = natH * k;
+	const float padX = (availWidth - drawW) * 0.5f;
+	const float padY = (availHeight - drawH) * 0.5f;
+	if (padX > 0.0f) {
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padX);
+	}
+	if (padY > 0.0f) {
+		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + padY);
+	}
+	// The surface stores the scene like an OpenGL framebuffer: memory row 0 is
+	// texture V=0, which corresponds to the bottom of the screen (map south), and
+	// V=1 holds the map north. ImGui places U/V (0, 1) .. (1, 0) top-left to
+	// bottom-right, so V must be inverted to keep north pointing up.
+	ImGui::Image((ImTextureID)(intptr_t)tex, { drawW, drawH }, { 0, 1 }, { 1, 0 });
+	setMapViewport(pos.x, pos.y, availWidth, availHeight);
 }
 
 bool isMapPoint(int x, int y) {

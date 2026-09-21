@@ -62,6 +62,12 @@ namespace RmeLayout {
 	// Everything outside it in the map area is opaque.
 	void drawMapViewport(float width, float height);
 
+	// Presents the live map (rendered by MapDrawer into its offscreen surface)
+	// as an ImGui::Image inside the current window, aspect-fitted within the
+	// given available space, and records the drawn rect as the map viewport so
+	// camera, scrolling and input keep following the visible map region.
+	void DrawLiveMap(wxWindow* canvas, float availWidth, float availHeight);
+
 	// Current widths of the [left | center | right] row panels, updated by
 	// drawPanelSizers() and read by the layout when sizing the panels.
 	float leftPanelWidth();

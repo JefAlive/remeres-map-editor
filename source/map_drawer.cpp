@@ -362,32 +362,40 @@ void MapDrawer::Draw() {
 
 	renderer->setOrtho(0, viewWidth, viewHeight, 0);
 	if (renderer->hasFBO()) {
+		// Resolve the scene into the persistent map surface instead of the
+		// canvas backbuffer; the layout presents it as a texture.
+		renderer->ensureMapSurface(screensize_x, screensize_y);
+		renderer->beginMapSurface();
 		if (scaleFilter == 2 && renderer->compositeFits(fboWidth, fboHeight)) {
-			renderer->presentComposite(screensize_x, screensize_y, sceneRebuilt, viewWidth / sceneWidth, viewHeight / sceneHeight, glViewportX, glViewportY);
+			renderer->presentComposite(screensize_x, screensize_y, sceneRebuilt, viewWidth / sceneWidth, viewHeight / sceneHeight, 0, 0, renderer->getMapSurfaceFBO());
 		} else {
 			float outputCellSize = 1.0f / zoom;
-			renderer->blitFBO(sceneWidth, sceneHeight, sourceCellSize, outputCellSize, screensize_x, screensize_y, glViewportX, glViewportY);
+			renderer->blitFBO(sceneWidth, sceneHeight, sourceCellSize, outputCellSize, screensize_x, screensize_y, 0, 0);
 		}
-	}
 
-	DrawDraggingShadow();
-	DrawHigherFloors();
-	if (options.dragging) {
-		DrawSelectionBox();
-	}
-	DrawLiveCursors();
-	DrawBrush();
-	if (options.show_grid && zoom <= 10.f) {
-		DrawGrid();
-	}
-	if (options.show_ingame_box) {
-		DrawIngameBox();
-	}
-	if (options.isTooltips() || globalTooltipFade > 0.0f) {
-		DrawTooltips();
-	}
-	if (options.show_performance_stats) {
-		DrawPerformanceStats();
+		// Ephemeral overlays are composited into the map surface too, so the
+		// texture the layout draws already includes them.
+		DrawDraggingShadow();
+		DrawHigherFloors();
+		if (options.dragging) {
+			DrawSelectionBox();
+		}
+		DrawLiveCursors();
+		DrawBrush();
+		if (options.show_grid && zoom <= 10.f) {
+			DrawGrid();
+		}
+		if (options.show_ingame_box) {
+			DrawIngameBox();
+		}
+		if (options.isTooltips() || globalTooltipFade > 0.0f) {
+			DrawTooltips();
+		}
+		if (options.show_performance_stats) {
+			DrawPerformanceStats();
+		}
+		renderer->flush();
+		renderer->endMapSurface();
 	}
 }
 
@@ -2271,11 +2279,16 @@ void MapDrawer::getColor(Brush* brush, const Position &position, uint8_t &r, uin
 }
 
 void MapDrawer::TakeScreenshot(uint8_t* screenshot_buffer) {
+	if (!renderer->hasMapSurface()) {
+		return;
+	}
+	renderer->beginMapSurface();
 	glPixelStorei(GL_PACK_ALIGNMENT, 1); // 1 byte alignment
 
 	for (int i = 0; i < screensize_y; ++i) {
 		glReadPixels(0, screensize_y - i, screensize_x, 1, GL_RGB, GL_UNSIGNED_BYTE, (GLubyte*)(screenshot_buffer) + 3 * screensize_x * i);
 	}
+	renderer->endMapSurface();
 }
 
 void MapDrawer::ShowPositionIndicator(const Position &position) {

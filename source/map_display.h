@@ -143,6 +143,11 @@ public:
 
 	MapWindow* GetMapWindow() const;
 	Position GetCursorPosition() const;
+	// The drawer that renders the map into its offscreen surface; used by the
+	// ImGui layout to present the map texture.
+	MapDrawer* GetDrawer() const noexcept {
+		return drawer;
+	}
 
 	void ShowPositionIndicator(const Position &position);
 	void TakeScreenshot(wxFileName path, wxString format);

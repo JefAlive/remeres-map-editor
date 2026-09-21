@@ -55,13 +55,35 @@ public:
 	void beginFBO();
 	void endFBO();
 	void blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight, int viewportX = 0, int viewportY = 0);
-	void presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY, int viewportX = 0, int viewportY = 0);
+	void presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY, int viewportX = 0, int viewportY = 0, GLuint targetFbo = 0);
 	bool compositeFits(int width, int height);
 	bool hasComposite() const {
 		return compositeFbo != 0 && compositePrograms[0].program != 0;
 	}
 	bool hasFBO() const {
 		return fboData.fbo != 0;
+	}
+
+	// Map surface: a persistent offscreen target where MapDrawer resolves the
+	// final scene. The layout presents it as a texture (ImGui::Image) so the map
+	// stays fully decoupled from the canvas backbuffer.
+	void ensureMapSurface(int w, int h);
+	void beginMapSurface();
+	void endMapSurface();
+	bool hasMapSurface() const {
+		return surfaceData.fbo != 0;
+	}
+	GLuint getMapSurfaceFBO() const {
+		return surfaceData.fbo;
+	}
+	GLuint getMapSurfaceTexture() const {
+		return surfaceData.texture;
+	}
+	int getMapSurfaceWidth() const {
+		return surfaceData.width;
+	}
+	int getMapSurfaceHeight() const {
+		return surfaceData.height;
 	}
 
 	void flush();
@@ -165,7 +187,7 @@ private:
 	int compositeCacheSteps = 0;
 	void ensureCompositeTarget(int index, int w, int h, bool linear, bool highPrecision);
 	void destroyCompositeTargets();
-	void runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX = 1.0f, float sourceScaleY = 1.0f, int screenX = 0, int screenY = 0);
+	void runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX = 1.0f, float sourceScaleY = 1.0f, int screenX = 0, int screenY = 0, GLuint screenFbo = 0);
 
 	struct Vertex {
 		float x;
@@ -206,6 +228,7 @@ private:
 		bool smooth = false;
 	};
 	FBOData fboData;
+	FBOData surfaceData;
 
 	void flushBatch();
 	void mergeCommands();
