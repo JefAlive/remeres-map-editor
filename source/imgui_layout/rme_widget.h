@@ -8,9 +8,21 @@
 // input capture, the map stops processing the corresponding events.
 namespace RmeLayout {
 
-	// Full ImGui frame (NewFrame -> Rme::Draw -> Render) for the given canvas.
-	// Must be called with a current GL context, i.e. from MapCanvas::OnPaint.
+	// The ImGui frame is split so the map can be drawn *inside* the child10
+	// viewport recorded by the layout before ImGui emits its draw data.
+	// Begin() must be called with a current GL context (i.e. from
+	// MapCanvas::OnPaint) and must be paired with a single End() call. Callers
+	// draw the map between Begin() and End(); the Rme layout widgets are
+	// submitted by Begin() and rendered by End().
+	bool Begin(wxWindow* canvas);
+	void End();
+	// Convenience full frame (NewFrame -> Rme::Draw -> Render).
 	void Render(wxWindow* canvas);
+
+	// Returns the recorded screen-space rect of the transparent map viewport
+	// (child10) in logical client pixels, relative to the canvas top-left.
+	// Returns false when the layout is inactive or the rect was not recorded.
+	bool getMapViewport(float& x, float& y, float& w, float& h);
 
 	// Input forwarding. Called from the MapCanvas event handlers.
 	void forwardMouseMove(int x, int y);

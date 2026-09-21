@@ -196,9 +196,50 @@ void MapCanvas::SetZoom(double value) {
 	}
 }
 
+bool MapCanvas::getMapViewport(int* origin_x, int* origin_y, int* size_x, int* size_y) const {
+	if (screenshot_buffer || !RmeLayout::isOverlayActive()) {
+		return false;
+	}
+	float x, y, w, h;
+	if (!RmeLayout::getMapViewport(x, y, w, h)) {
+		return false;
+	}
+	if (origin_x) {
+		*origin_x = static_cast<int>(x);
+	}
+	if (origin_y) {
+		*origin_y = static_cast<int>(y);
+	}
+	if (size_x) {
+		*size_x = static_cast<int>(w);
+	}
+	if (size_y) {
+		*size_y = static_cast<int>(h);
+	}
+	return true;
+}
+
+bool MapCanvas::getMapViewportSize(int* size_x, int* size_y) const {
+	int vpx, vpy, vpw, vph;
+	if (getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+		*size_x = vpw;
+		*size_y = vph;
+		return true;
+	}
+	GetMapWindow()->GetViewSize(size_x, size_y);
+	return false;
+}
+
 void MapCanvas::GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const {
 	MapWindow* window = GetMapWindow();
-	window->GetViewSize(screensize_x, screensize_y);
+	int vpx, vpy, vpw, vph;
+	if (getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+		const float scale = GetContentScaleFactor();
+		*screensize_x = static_cast<int>(vpw * scale);
+		*screensize_y = static_cast<int>(vph * scale);
+	} else {
+		window->GetViewSize(screensize_x, screensize_y);
+	}
 	window->GetViewStart(view_scroll_x, view_scroll_y);
 }
 
@@ -207,6 +248,13 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 		return;
 	}
 	SetCurrent(*g_gui.GetGLContext(this));
+
+	const bool layoutActive = RmeLayout::isOverlayActive();
+
+	// Layout pass: ImGui setup and widget submission. This records the child10
+	// rect (the live map viewport) for the current frame before the map is
+	// drawn; End() later renders the ImGui draw data on top of the map.
+	const bool layoutStarted = layoutActive ? RmeLayout::Begin(this) : false;
 
 	if (g_gui.IsRenderingEnabled()) {
 		DrawingOptions &options = drawer->getOptions();
@@ -258,6 +306,16 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 			animation_timer->Stop();
 		}
 
+		// The map paints inside the child10 viewport registered by the layout;
+		// clear the whole canvas first so stale pixels can't leak through panel
+		// seams. Screenshots keep the legacy full-canvas render, so the clear is
+		// harmless there too (the map covers it).
+		int fw, fh;
+		GetMapWindow()->GetViewSize(&fw, &fh);
+		glViewport(0, 0, fw, fh);
+		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 		drawer->SetupVars();
 		drawer->SetupGL();
 		drawer->Draw();
@@ -275,7 +333,7 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 	// The always-on Rme layout (with its own bottom toolbar) replaces the
 	// legacy status footer and overlay scrollbars while it is active, so skip
 	// that extra ImGui frame and its geometry work.
-	if (g_gui.IsRenderingEnabled() && !RmeLayout::isOverlayActive()) {
+	if (g_gui.IsRenderingEnabled() && !layoutActive) {
 		// Compute overlay scrollbar geometry
 		int cw, ch;
 		GetClientSize(&cw, &ch);
@@ -317,7 +375,11 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 
 	// ImRAD-generated editor layout: always-on overlay replacing the map-facing
 	// UI. Drawn last so it covers the status footer and map canvas.
-	RmeLayout::Render(this);
+	if (layoutStarted) {
+		RmeLayout::End();
+	} else {
+		RmeLayout::Render(this);
+	}
 
 	// Swap buffer
 	SwapBuffers();
@@ -421,6 +483,14 @@ void MapCanvas::ScreenToMap(int screen_x, int screen_y, int* map_x, int* map_y) 
 	int start_x, start_y;
 	GetMapWindow()->GetViewStart(&start_x, &start_y);
 
+	// Pointer coordinates are canvas-relative logical pixels; the map itself is
+	// drawn inside the child10 viewport, so offset to its local origin first.
+	int vpx, vpy, vpw, vph;
+	if (getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+		screen_x -= vpx;
+		screen_y -= vpy;
+	}
+
 	screen_x *= GetContentScaleFactor();
 	screen_y *= GetContentScaleFactor();
 
@@ -454,6 +524,10 @@ MapWindow* MapCanvas::GetMapWindow() const {
 }
 
 void MapCanvas::GetScreenCenter(int* map_x, int* map_y) {
+	int vpx, vpy, vpw, vph;
+	if (getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+		return ScreenToMap(vpx + vpw / 2, vpy + vph / 2, map_x, map_y);
+	}
 	int width, height;
 	GetMapWindow()->GetViewSize(&width, &height);
 	return ScreenToMap(width / 2, height / 2, map_x, map_y);
@@ -1539,12 +1613,17 @@ void MapCanvas::OnMouseCameraClick(wxMouseEvent &event) {
 	last_mmb_click_y = event.GetY();
 
 	if (event.ControlDown()) {
-		int screensize_x, screensize_y;
 		MapWindow* window = GetMapWindow();
-		window->GetViewSize(&screensize_x, &screensize_y);
+		int vpx, vpy, vpw, vph;
+		int local_x = cursor_x;
+		int local_y = cursor_y;
+		if (getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+			local_x -= vpx;
+			local_y -= vpy;
+		}
 		window->ScrollRelative(
-			int(-screensize_x * (1.0 - zoom) * (std::max(cursor_x, 1) / double(screensize_x))),
-			int(-screensize_y * (1.0 - zoom) * (std::max(cursor_y, 1) / double(screensize_y)))
+			int(-(1.0 - zoom) * std::max(local_x, 1)),
+			int(-(1.0 - zoom) * std::max(local_y, 1))
 		);
 		zoom = 1.0;
 		Refresh();
@@ -1560,12 +1639,22 @@ void MapCanvas::OnMouseCameraRelease(wxMouseEvent &event) {
 		// ...
 		// Haven't moved much, it's a click!
 	} else if (last_mmb_click_x > event.GetX() - 3 && last_mmb_click_x < event.GetX() + 3 && last_mmb_click_y > event.GetY() - 3 && last_mmb_click_y < event.GetY() + 3) {
-		int screensize_x, screensize_y;
 		MapWindow* window = GetMapWindow();
-		window->GetViewSize(&screensize_x, &screensize_y);
+		int vpx, vpy, vpw, vph;
+		int local_x = cursor_x;
+		int local_y = cursor_y;
+		int view_w, view_h;
+		if (getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+			local_x -= vpx;
+			local_y -= vpy;
+			view_w = vpw;
+			view_h = vph;
+		} else {
+			window->GetViewSize(&view_w, &view_h);
+		}
 		window->ScrollRelative(
-			int(zoom * (2 * cursor_x - screensize_x)),
-			int(zoom * (2 * cursor_y - screensize_y))
+			int(zoom * (2 * local_x - view_w)),
+			int(zoom * (2 * local_y - view_h))
 		);
 		Refresh();
 	}
@@ -1843,15 +1932,14 @@ void MapCanvas::OnWheel(wxMouseEvent &event) {
 
 		UpdateZoomStatus();
 
-		int screensize_x, screensize_y;
-		MapWindow* window = GetMapWindow();
-		window->GetViewSize(&screensize_x, &screensize_y);
+		int view_w, view_h;
+		getMapViewportSize(&view_w, &view_h);
 
 		// Zoom always anchored to the viewport center (not the cursor)
-		int scroll_x = int(screensize_x * diff * 0.5);
-		int scroll_y = int(screensize_y * diff * 0.5);
+		int scroll_x = int(view_w * diff * 0.5);
+		int scroll_y = int(view_h * diff * 0.5);
 
-		window->ScrollRelative(-scroll_x, -scroll_y);
+		GetMapWindow()->ScrollRelative(-scroll_x, -scroll_y);
 	}
 
 	Refresh();
@@ -1973,12 +2061,11 @@ void MapCanvas::OnKeyDown(wxKeyEvent &event) {
 			}
 			double diff = zoom - oldzoom;
 
-			int screensize_x, screensize_y;
-			window->GetViewSize(&screensize_x, &screensize_y);
-
-			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * 0.5);
-			int scroll_y = int(screensize_y * diff * 0.5);
+			// Zoom always anchored to the viewport center (not the cursor)
+			int view_w, view_h;
+			getMapViewportSize(&view_w, &view_h);
+			int scroll_x = int(view_w * diff * 0.5);
+			int scroll_y = int(view_h * diff * 0.5);
 
 			window->ScrollRelative(-scroll_x, -scroll_y);
 
@@ -2002,12 +2089,12 @@ void MapCanvas::OnKeyDown(wxKeyEvent &event) {
 			}
 			double diff = zoom - oldzoom;
 
-			int screensize_x, screensize_y;
-			window->GetViewSize(&screensize_x, &screensize_y);
+			int view_w, view_h;
+			getMapViewportSize(&view_w, &view_h);
 
 			// This took a day to figure out!
-			int scroll_x = int(screensize_x * diff * 0.5);
-			int scroll_y = int(screensize_y * diff * 0.5);
+			int scroll_x = int(view_w * diff * 0.5);
+			int scroll_y = int(view_h * diff * 0.5);
 			window->ScrollRelative(-scroll_x, -scroll_y);
 
 			UpdatePositionStatus();
@@ -2174,7 +2261,7 @@ void MapCanvas::OnKeyDown(wxKeyEvent &event) {
 					int view_start_map_x = view_start_x / rme::TileSize, view_start_map_y = view_start_y / rme::TileSize;
 
 					int view_screensize_x, view_screensize_y;
-					window->GetViewSize(&view_screensize_x, &view_screensize_y);
+					getMapViewportSize(&view_screensize_x, &view_screensize_y);
 
 					int map_x = int(view_start_map_x + (view_screensize_x * zoom) / rme::TileSize / 2);
 					int map_y = int(view_start_map_y + (view_screensize_y * zoom) / rme::TileSize / 2);

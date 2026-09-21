@@ -131,6 +131,16 @@ public:
 	virtual void SetZoom(double value);
 	virtual void GetViewBox(int* view_scroll_x, int* view_scroll_y, int* screensize_x, int* screensize_y) const;
 
+	// Live map viewport (the transparent ImGui child10 the map is drawn into),
+	// in logical client pixels relative to the canvas top-left. Returns false
+	// when the Rme layout is inactive, a screenshot is pending (full-canvas
+	// render), or the rect has not been recorded yet; callers then fall back to
+	// the full canvas.
+	bool getMapViewport(int* origin_x, int* origin_y, int* size_x, int* size_y) const;
+	// Logical size of the live map viewport (child10) or the full canvas when
+	// the viewport is not available; used for center-anchored zoom/pan math.
+	bool getMapViewportSize(int* size_x, int* size_y) const;
+
 	MapWindow* GetMapWindow() const;
 	Position GetCursorPosition() const;
 

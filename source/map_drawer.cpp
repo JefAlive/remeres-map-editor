@@ -173,6 +173,20 @@ void MapDrawer::SetupVars() {
 	canvas->MouseToMap(&mouse_map_x, &mouse_map_y);
 	canvas->GetViewBox(&view_scroll_x, &view_scroll_y, &screensize_x, &screensize_y);
 
+	// The scene is rendered into the child10 viewport: screensize is already
+	// its framebuffer size, and the top-left corner maps to a GL viewport
+	// origin flipped against the full-canvas framebuffer height.
+	int vpx, vpy, vpw, vph;
+	if (canvas->getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+		const double scale = canvas->GetContentScaleFactor();
+		const int fb_height = static_cast<int>(canvas->GetClientSize().y * scale);
+		glViewportX = static_cast<int>(vpx * scale);
+		glViewportY = fb_height - static_cast<int>(vpy * scale) - screensize_y;
+	} else {
+		glViewportX = 0;
+		glViewportY = 0;
+	}
+
 	dragging = canvas->dragging;
 	dragging_draw = canvas->dragging_draw;
 
@@ -206,7 +220,7 @@ void MapDrawer::SetupVars() {
 }
 
 void MapDrawer::SetupGL() {
-	glViewport(0, 0, screensize_x, screensize_y);
+	glViewport(glViewportX, glViewportY, screensize_x, screensize_y);
 
 	renderer->init();
 
@@ -349,10 +363,10 @@ void MapDrawer::Draw() {
 	renderer->setOrtho(0, viewWidth, viewHeight, 0);
 	if (renderer->hasFBO()) {
 		if (scaleFilter == 2 && renderer->compositeFits(fboWidth, fboHeight)) {
-			renderer->presentComposite(screensize_x, screensize_y, sceneRebuilt, viewWidth / sceneWidth, viewHeight / sceneHeight);
+			renderer->presentComposite(screensize_x, screensize_y, sceneRebuilt, viewWidth / sceneWidth, viewHeight / sceneHeight, glViewportX, glViewportY);
 		} else {
 			float outputCellSize = 1.0f / zoom;
-			renderer->blitFBO(sceneWidth, sceneHeight, sourceCellSize, outputCellSize, screensize_x, screensize_y);
+			renderer->blitFBO(sceneWidth, sceneHeight, sourceCellSize, outputCellSize, screensize_x, screensize_y, glViewportX, glViewportY);
 		}
 	}
 

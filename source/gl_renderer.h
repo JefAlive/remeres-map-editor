@@ -54,8 +54,8 @@ public:
 	void destroyFBO();
 	void beginFBO();
 	void endFBO();
-	void blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight);
-	void presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY);
+	void blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight, int viewportX = 0, int viewportY = 0);
+	void presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY, int viewportX = 0, int viewportY = 0);
 	bool compositeFits(int width, int height);
 	bool hasComposite() const {
 		return compositeFbo != 0 && compositePrograms[0].program != 0;
@@ -165,7 +165,7 @@ private:
 	int compositeCacheSteps = 0;
 	void ensureCompositeTarget(int index, int w, int h, bool linear, bool highPrecision);
 	void destroyCompositeTargets();
-	void runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX = 1.0f, float sourceScaleY = 1.0f);
+	void runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX = 1.0f, float sourceScaleY = 1.0f, int screenX = 0, int screenY = 0);
 
 	struct Vertex {
 		float x;

@@ -198,14 +198,14 @@ ImGuiKey mapKeyCode(int keyCode) {
 
 namespace RmeLayout {
 
-void Render(wxWindow* canvas) {
+bool Begin(wxWindow* canvas) {
 	if (!canvas || !ImGuiOverlay::ensureInitialized()) {
-		return;
+		return false;
 	}
 
 	const wxSize clientSize = canvas->GetClientSize();
 	if (clientSize.x <= 0 || clientSize.y <= 0) {
-		return;
+		return false;
 	}
 
 	const auto now = std::chrono::steady_clock::now();
@@ -228,9 +228,30 @@ void Render(wxWindow* canvas) {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui::NewFrame();
 	g_rme.Draw(canvas);
+	return true;
+}
+
+void End() {
 	ImGui::EndFrame();
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void Render(wxWindow* canvas) {
+	if (Begin(canvas)) {
+		End();
+	}
+}
+
+bool getMapViewport(float& x, float& y, float& w, float& h) {
+	if (s_map_viewport.w <= 0.0f || s_map_viewport.h <= 0.0f) {
+		return false;
+	}
+	x = s_map_viewport.x;
+	y = s_map_viewport.y;
+	w = s_map_viewport.w;
+	h = s_map_viewport.h;
+	return true;
 }
 
 void forwardMouseMove(int x, int y) {

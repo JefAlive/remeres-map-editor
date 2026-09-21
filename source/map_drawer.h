@@ -141,6 +141,10 @@ class MapDrawer {
 	int end_x, end_y, end_z, superend_z;
 	int view_scroll_x, view_scroll_y;
 	int screensize_x, screensize_y;
+	// Framebuffer origin (GL bottom-left) of the child10 viewport the live map
+	// is rendered into; 0,0 for the legacy full-canvas render.
+	int glViewportX = 0;
+	int glViewportY = 0;
 	int tile_size;
 	int floor;
 

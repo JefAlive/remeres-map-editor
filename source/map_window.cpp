@@ -87,21 +87,37 @@ void MapWindow::SetSize(int x, int y, bool center) {
 
 	if (center) {
 		// Center the view: camera offset = content_center - view_center
-		int windowSizeX, windowSizeY;
-		canvas->GetSize(&windowSizeX, &windowSizeY);
 		double zoom = g_gui.GetCurrentZoom();
-		scroll_x = x / 2 - int(windowSizeX * zoom / 2.0);
-		scroll_y = y / 2 - int(windowSizeY * zoom / 2.0);
+		double view_cx, view_cy;
+		int vpx, vpy, vpw, vph;
+		if (canvas->getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+			view_cx = vpx + vpw / 2.0;
+			view_cy = vpy + vph / 2.0;
+		} else {
+			int windowSizeX, windowSizeY;
+			canvas->GetSize(&windowSizeX, &windowSizeY);
+			view_cx = windowSizeX / 2.0;
+			view_cy = windowSizeY / 2.0;
+		}
+		scroll_x = x / 2 - int(view_cx * zoom);
+		scroll_y = y / 2 - int(view_cy * zoom);
 	}
 	ClampScroll();
 }
 
 void MapWindow::ClampScroll() {
-	int windowSizeX, windowSizeY;
-	canvas->GetSize(&windowSizeX, &windowSizeY);
 	double zoom = g_gui.GetCurrentZoom();
-	int view_w = int(windowSizeX * zoom);
-	int view_h = int(windowSizeY * zoom);
+	int view_w, view_h;
+	int vpx, vpy, vpw, vph;
+	if (canvas->getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+		view_w = int(vpw * zoom);
+		view_h = int(vph * zoom);
+	} else {
+		int windowSizeX, windowSizeY;
+		canvas->GetSize(&windowSizeX, &windowSizeY);
+		view_w = int(windowSizeX * zoom);
+		view_h = int(windowSizeY * zoom);
+	}
 	int max_x = std::max(0, range_x - view_w);
 	int max_y = std::max(0, range_y - view_h);
 	scroll_x = std::min(std::max(0, scroll_x), max_x);
@@ -177,11 +193,20 @@ void MapWindow::GoToPreviousCenterPosition() {
 
 void MapWindow::Scroll(int x, int y, bool center) {
 	if (center) {
-		int windowSizeX, windowSizeY;
-
-		canvas->GetSize(&windowSizeX, &windowSizeY);
-		x -= int((windowSizeX * g_gui.GetCurrentZoom()) / 2.0);
-		y -= int((windowSizeY * g_gui.GetCurrentZoom()) / 2.0);
+		double zoom = g_gui.GetCurrentZoom();
+		double view_cx, view_cy;
+		int vpx, vpy, vpw, vph;
+		if (canvas->getMapViewport(&vpx, &vpy, &vpw, &vph)) {
+			view_cx = vpx + vpw / 2.0;
+			view_cy = vpy + vph / 2.0;
+		} else {
+			int windowSizeX, windowSizeY;
+			canvas->GetSize(&windowSizeX, &windowSizeY);
+			view_cx = windowSizeX / 2.0;
+			view_cy = windowSizeY / 2.0;
+		}
+		x -= int(view_cx * zoom);
+		y -= int(view_cy * zoom);
 	}
 
 	scroll_x = x;

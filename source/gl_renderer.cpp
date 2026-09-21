@@ -1472,11 +1472,11 @@ void GLRenderer::endFBO() {
 	}
 }
 
-void GLRenderer::blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight) {
+void GLRenderer::blitFBO(float w, float h, int sourceCellSize, float outputCellSize, int outputWidth, int outputHeight, int viewportX, int viewportY) {
 	if (fboData.fbo == 0) {
 		return;
 	}
-	glViewport(0, 0, outputWidth, outputHeight);
+	glViewport(viewportX, viewportY, outputWidth, outputHeight);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1562,7 +1562,7 @@ void GLRenderer::destroyCompositeTargets() {
 	compositeCacheSteps = 0;
 }
 
-void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX, float sourceScaleY) {
+void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inputH, GLuint origTex, GLuint prev2Tex, GLuint prev5Tex, int targetIndex, int outW, int outH, GLuint alphaTex, float sourceScaleX, float sourceScaleY, int screenX, int screenY) {
 	auto &p = compositePrograms[pass];
 	if (p.program == 0) {
 		return;
@@ -1574,7 +1574,7 @@ void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inp
 		glBindFramebuffer(GL_FRAMEBUFFER, compositeFbo);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, compositeTargets[targetIndex].texture, 0);
 	}
-	glViewport(0, 0, outW, outH);
+	glViewport(targetIndex < 0 ? screenX : 0, targetIndex < 0 ? screenY : 0, outW, outH);
 
 	if (targetIndex < 0) {
 		glEnable(GL_BLEND);
@@ -1648,7 +1648,7 @@ void GLRenderer::runCompositePass(int pass, GLuint inputTex, int inputW, int inp
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY) {
+void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuild, float sourceScaleX, float sourceScaleY, int viewportX, int viewportY) {
 	if (fboData.fbo == 0 || !hasComposite()) {
 		return;
 	}
@@ -1774,17 +1774,17 @@ void GLRenderer::presentComposite(int outputWidth, int outputHeight, bool rebuil
 	}
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0, 0, outputWidth, outputHeight);
+	glViewport(viewportX, viewportY, outputWidth, outputHeight);
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Glow resolve (sharp + P22-tinted halation) to the screen, restoring the map
 	// alpha so the editor background shows through transparent areas.
 	runCompositePass(COMPOSITE_PASS_RESOLVE, compositeTargets[COMPOSITE_TARGET_BLUR_V].texture, quarterW, quarterH,
-		compositeTargets[COMPOSITE_TARGET_SHARP].texture, 0, 0, -1, outputWidth, outputHeight, fboData.texture, sourceScaleX, sourceScaleY);
+		compositeTargets[COMPOSITE_TARGET_SHARP].texture, 0, 0, -1, outputWidth, outputHeight, fboData.texture, sourceScaleX, sourceScaleY, viewportX, viewportY);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glViewport(0, 0, outputWidth, outputHeight);
+	glViewport(viewportX, viewportY, outputWidth, outputHeight);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glUseProgram(0);
