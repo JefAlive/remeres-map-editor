@@ -147,14 +147,16 @@ MapCanvas::MapCanvas(MapWindow* parent, Editor &editor, int* attriblist) :
 	last_mmb_click_x(-1),
 	last_mmb_click_y(-1) {
 	popup_menu = newd MapPopupMenu(editor);
-	animation_timer = newd AnimationTimer(this);
+	render_timer = newd RenderTimer(this);
+	render_timer->Start(16);
 	drawer = new MapDrawer(this);
 	keyCode = WXK_NONE;
 }
 
 MapCanvas::~MapCanvas() {
+	render_timer->Stop();
 	delete popup_menu;
-	delete animation_timer;
+	delete render_timer;
 	delete drawer;
 	free(screenshot_buffer);
 }
@@ -167,11 +169,7 @@ void MapCanvas::QueueRefresh(bool mark_scene_dirty) {
 	if (mark_scene_dirty) {
 		drawer->markDirty();
 	}
-	if (refresh_watch.Time() > g_settings.getInteger(Config::HARD_REFRESH_RATE)) {
-		refresh_watch.Start();
-		wxGLCanvas::Update();
-}
-wxGLCanvas::Refresh();
+	wxGLCanvas::Refresh();
 }
 
 void MapCanvas::SetZoom(double value) {
@@ -294,16 +292,15 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 
 		options.dragging = boundbox_selection;
 
-		const bool animate_position_indicator = drawer->GetPositionIndicatorTime() != 0;
-		const bool animate_preview = options.show_preview && zoom <= 2.0f;
-		if (animate_position_indicator) {
-			animation_timer->StartRefresh(16, true);
-		} else if (animate_preview) {
-			animation_timer->StartRefresh(250, true);
-		} else if (options.show_performance_stats) {
-			animation_timer->StartRefresh(500, false);
-		} else {
-			animation_timer->Stop();
+		// The RenderTimer owns the fixed 60 Hz cadence; input and the editor
+		// only queue repaints (RequestFrame/Refresh) instead of competing for
+		// them. Animations and the preview just mark the cached scene dirty so
+		// the next tick rebuilds it. The preview rebuild is throttled (~4 Hz)
+		// so the expensive surface work never drags the UI cadence.
+		++render_frame;
+		if (drawer->GetPositionIndicatorTime() != 0 ||
+			(options.show_preview && zoom <= 2.0f && render_frame % 15 == 0)) {
+			drawer->markDirty();
 		}
 
 		// The map paints inside the child10 viewport registered by the layout;
@@ -395,9 +392,6 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 void MapCanvas::ShowPositionIndicator(const Position &position) {
 	if (drawer) {
 		drawer->ShowPositionIndicator(position);
-		if (!animation_timer->IsRunning()) {
-			Update();
-		}
 	}
 }
 
@@ -603,6 +597,8 @@ void MapCanvas::UpdateZoomStatus() {
 void MapCanvas::OnMouseMove(wxMouseEvent &event) {
 	RmeLayout::forwardMouseMove(event.GetX(), event.GetY());
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
+		// ImGui owns the mouse. The fixed-cadence RenderTimer repaints on the
+		// next tick (<= 16 ms), so nothing extra needs to be scheduled here.
 		return;
 	}
 	// Handle overlay scrollbar drag
@@ -783,6 +779,7 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent &event) {
 void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(0, true);
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
+		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
 	}
 	OnMouseActionClick(event);
@@ -791,6 +788,7 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(0, true);
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
+		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
 	}
 	if (!g_settings.getInteger(Config::DOUBLECLICK_PROPERTIES)) {
@@ -847,6 +845,7 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 void MapCanvas::OnMouseCenterClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(2, true);
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
+		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
 	}
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
@@ -868,6 +867,7 @@ void MapCanvas::OnMouseCenterRelease(wxMouseEvent &event) {
 void MapCanvas::OnMouseRightClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(1, true);
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
+		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
 	}
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
@@ -1886,6 +1886,7 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
 void MapCanvas::OnWheel(wxMouseEvent &event) {
 	RmeLayout::forwardMouseWheel(event.GetWheelRotation());
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
+		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
 	}
 	if (event.ControlDown()) {
@@ -1970,6 +1971,7 @@ void MapCanvas::OnKeyDown(wxKeyEvent &event) {
 	RmeLayout::forwardKey(event.GetKeyCode(), event.GetUnicodeKey(), true,
 						  event.ControlDown(), event.ShiftDown(), event.AltDown());
 	if (RmeLayout::wantsCaptureKeyboard()) {
+		// Typed text shows on the next fixed-cadence tick (<= 16 ms).
 		return;
 	}
 	MapWindow* window = GetMapWindow();
@@ -3354,32 +3356,15 @@ bool MapCanvas::floodFill(Map* map, const Position &center, int x, int y, Ground
 }
 
 // ============================================================================
-// AnimationTimer
+// RenderTimer (fixed-cadence frame loop)
 
-AnimationTimer::AnimationTimer(MapCanvas* canvas) :
+RenderTimer::RenderTimer(MapCanvas* canvas) :
 	wxTimer(),
 	map_canvas(canvas) {
-	////
 }
 
-void AnimationTimer::Notify() {
-	map_canvas->QueueRefresh(mark_scene_dirty);
+void RenderTimer::Notify() {
+	if (map_canvas->IsShown()) {
+		map_canvas->RequestFrame();
+	}
 }
-
-void AnimationTimer::StartRefresh(int new_interval, bool new_mark_scene_dirty) {
-	if (!started || interval != new_interval || mark_scene_dirty != new_mark_scene_dirty) {
-		started = true;
-		interval = new_interval;
-		mark_scene_dirty = new_mark_scene_dirty;
-		wxTimer::Start(interval);
-	}
-};
-
-void AnimationTimer::Stop() {
-	if (started) {
-		started = false;
-		mark_scene_dirty = false;
-		interval = 0;
-		wxTimer::Stop();
-	}
-};

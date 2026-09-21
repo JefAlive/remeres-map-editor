@@ -28,7 +28,7 @@ class Monster;
 class Npc;
 class MapWindow;
 class MapPopupMenu;
-class AnimationTimer;
+class RenderTimer;
 class MapDrawer;
 
 class MapCanvas : public wxGLCanvas {
@@ -100,6 +100,12 @@ public:
 	void OnProperties(wxCommandEvent &event);
 
 	virtual void Refresh();
+
+	// Queues a repaint without touching the scene cache. The fixed-cadence
+	// RenderTimer drives the frame loop; this is its per-tick kick.
+	void RequestFrame() {
+		wxWindow::Refresh();
+	}
 
 	// Repaints the canvas without invalidating the scene cache. Used to update
 	// the ImGui status bar overlay when only its text changed.
@@ -214,9 +220,12 @@ private:
 
 	uint32_t current_house_id;
 
-	wxStopWatch refresh_watch;
 	MapPopupMenu* popup_menu;
-	AnimationTimer* animation_timer;
+	RenderTimer* render_timer;
+
+	// Frame counter for the fixed-cadence loop; used to throttle expensive
+	// scene rebuilds (e.g. preview animation) without extra timers.
+	unsigned render_frame = 0;
 
 	// Overlay scrollbar drag state
 	bool scrollbar_dragging_v = false;
@@ -225,7 +234,7 @@ private:
 	float scrollbar_grab_h = 0.0f;
 
 	friend class MapDrawer;
-	friend class AnimationTimer;
+	friend class RenderTimer;
 
 	DECLARE_EVENT_TABLE()
 };
@@ -242,19 +251,14 @@ protected:
 	Editor &editor;
 };
 
-class AnimationTimer : public wxTimer {
+class RenderTimer : public wxTimer {
 public:
-	AnimationTimer(MapCanvas* canvas);
+	RenderTimer(MapCanvas* canvas);
 
 	void Notify();
-	void StartRefresh(int interval, bool mark_scene_dirty);
-	void Stop();
 
 private:
 	MapCanvas* map_canvas;
-	bool started = false;
-	bool mark_scene_dirty = false;
-	int interval = 0;
 };
 
 #endif

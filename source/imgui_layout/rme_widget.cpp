@@ -227,6 +227,14 @@ bool Begin(wxWindow* canvas) {
 	io.DisplayFramebufferScale = ImVec2(scale, scale);
 	io.DeltaTime = deltaTime;
 
+	// The map's own events forward the pointer to ImGui, but wx may coalesce or
+	// drop fast motion events. Re-sync the cursor from the platform every frame
+	// so widgets always see the freshest position (engine-style input poll).
+	if (s_overlay_active) {
+		const wxPoint mouse = canvas->ScreenToClient(wxGetMousePosition());
+		io.AddMousePosEvent(static_cast<float>(mouse.x), static_cast<float>(mouse.y));
+	}
+
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui::NewFrame();
 	g_rme.Draw(canvas);
