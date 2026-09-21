@@ -294,12 +294,11 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 
 		// The RenderTimer owns the fixed 60 Hz cadence; input and the editor
 		// only queue repaints (RequestFrame/Refresh) instead of competing for
-		// them. Animations and the preview just mark the cached scene dirty so
-		// the next tick rebuilds it. The preview rebuild is throttled (~4 Hz)
-		// so the expensive surface work never drags the UI cadence.
-		++render_frame;
-		if (drawer->GetPositionIndicatorTime() != 0 ||
-			(options.show_preview && zoom <= 2.0f && render_frame % 15 == 0)) {
+		// them. Animation and preview rebuilds are driven by MapDrawer's own
+		// dirty rules (pointer move / drag) plus a wall-clock animation tick
+		// handled inside Draw(), so here only the position indicator animates
+		// at the UI cadence.
+		if (drawer->GetPositionIndicatorTime() != 0) {
 			drawer->markDirty();
 		}
 

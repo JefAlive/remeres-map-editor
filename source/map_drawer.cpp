@@ -63,6 +63,14 @@
 #include "light_drawer.h"
 #include "gl_renderer.h"
 
+// Cadence used by tickPreviewAnimation(): while the preview mode is on and the
+// pointer is idle, the cached scene rebuilds at least this often so animated
+// Tibia sprites (torches, waterfalls...) keep advancing. Their phase comes from
+// per-sprite wall-clock durations (Animator), so this only needs to sample
+// faster than the shortest typical phase (~30 Hz) to look continuous. It never
+// hits the 60 fps UI cadence because nothing dirties on pure idle otherwise.
+static constexpr long long PreviewAnimationIntervalMS = 33;
+
 DrawingOptions::DrawingOptions() {
 	SetDefault();
 }
@@ -269,10 +277,40 @@ bool MapDrawer::isSceneDirty() const {
 	if (dragging || dragging_draw) {
 		return true;
 	}
-	if (options.show_preview && zoom <= 2.0f) {
+	// The preview overlay rebuilds when the pointer (which moves the ghost)
+	// moved since the last rebuild, so an idle preview does not keep the whole
+	// map re-rendering at the UI cadence for nothing.
+	if (options.show_preview && zoom <= 2.0f &&
+		(mouse_map_x != prevMouseX || mouse_map_y != prevMouseY)) {
 		return true;
 	}
 	return false;
+}
+
+bool MapDrawer::sceneRebuildDue() const {
+	// 0 (default) = rebuild whenever dirty, at the UI cadence. A positive cap
+	// throttles the expensive scene rebuild (e.g. 30 fps) while the UI keeps
+	// its fixed 60 fps; only the cached surface refresh slows down.
+	const int target_fps = g_settings.getInteger(Config::SCENE_RENDER_FPS);
+	if (target_fps <= 0) {
+		return true;
+	}
+	const long long now = wxGetLocalTimeMillis().GetValue();
+	return (now - last_rebuild_ms) >= (1000LL / target_fps);
+}
+
+bool MapDrawer::tickPreviewAnimation() {
+	if (!options.show_preview || zoom > 2.0f) {
+		return false;
+	}
+
+	const long long now = wxGetLocalTimeMillis().GetValue();
+	if (now - last_preview_anim_ms < PreviewAnimationIntervalMS) {
+		return false;
+	}
+
+	last_preview_anim_ms = now;
+	return true;
 }
 
 void MapDrawer::Draw() {
@@ -333,7 +371,11 @@ void MapDrawer::Draw() {
 	}
 	renderer->ensureFBO(fboWidth, fboHeight, fboSmooth);
 
-	const bool sceneRebuilt = isSceneDirty();
+	// The preview animation tick counts as "dirty" (animated Tibia sprites
+	// must keep advancing while preview is on), but every rebuild still obeys
+	// the SCENE_RENDER_FPS pacing cap so a low cap throttles everything.
+	const bool previewAnimTick = tickPreviewAnimation();
+	const bool sceneRebuilt = (isSceneDirty() || previewAnimTick) && sceneRebuildDue();
 	if (sceneRebuilt) {
 		renderer->beginFBO();
 		if (renderer->hasFBO()) {
@@ -357,7 +399,10 @@ void MapDrawer::Draw() {
 		prevScreenW = screensize_x;
 		prevScreenH = screensize_y;
 		prevScaleFilter = g_settings.getInteger(Config::SCALE_FILTER);
+		prevMouseX = mouse_map_x;
+		prevMouseY = mouse_map_y;
 		fboDirty = false;
+		last_rebuild_ms = wxGetLocalTimeMillis().GetValue();
 	}
 
 	renderer->setOrtho(0, viewWidth, viewHeight, 0);

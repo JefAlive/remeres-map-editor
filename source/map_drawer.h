@@ -119,6 +119,17 @@ class MapDrawer {
 	std::unique_ptr<GLRenderer> renderer = std::make_unique<GLRenderer>();
 
 	bool isSceneDirty() const;
+	// Enforces Config::SCENE_RENDER_FPS (0 = rebuild whenever dirty at the UI
+	// cadence); used so an expensive scene rebuild can run at a lower capped
+	// rate while the ImGui layout keeps its fixed 60 fps.
+	bool sceneRebuildDue() const;
+	// Returns true once per sprite-animation interval (wall-clock based) while
+	// the preview mode is on, so animated Tibia sprites (torches, waterfalls)
+	// keep their frames advancing even when the pointer is idle. Mirrors the
+	// per-frame dirty when interacting: the rebuild only happens while preview
+	// is actually active and at the animation cadence, not at the 60 fps UI
+	// cadence.
+	bool tickPreviewAnimation();
 
 	// Scene cache tracking
 	int prevScrollX = -1;
@@ -130,6 +141,11 @@ class MapDrawer {
 	int prevScreenH = -1;
 	int prevScaleFilter = -1;
 	bool fboDirty = true;
+	// Preview ghost / scene pacing tracking
+	int prevMouseX = -1;
+	int prevMouseY = -1;
+	long long last_rebuild_ms = 0;
+	long long last_preview_anim_ms = 0;
 
 	float zoom;
 	float globalTooltipFade = 0.0f;

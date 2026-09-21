@@ -223,10 +223,6 @@ private:
 	MapPopupMenu* popup_menu;
 	RenderTimer* render_timer;
 
-	// Frame counter for the fixed-cadence loop; used to throttle expensive
-	// scene rebuilds (e.g. preview animation) without extra timers.
-	unsigned render_frame = 0;
-
 	// Overlay scrollbar drag state
 	bool scrollbar_dragging_v = false;
 	bool scrollbar_dragging_h = false;
