@@ -313,9 +313,9 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 		int fw, fh;
 		GetMapWindow()->GetViewSize(&fw, &fh);
 		glViewport(0, 0, fw, fh);
-		// Dark gray backdrop for the transparent layout, so the editor never
-		// shows a pure-black void behind the map surface and panels.
-		glClearColor(0.11f, 0.11f, 0.13f, 1.0f);
+		// Aura backdrop (#15141b) for the transparent layout, so the editor
+		// never shows a pure-black void behind the map surface and panels.
+		glClearColor(0.082f, 0.078f, 0.106f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		drawer->SetupVars();

@@ -466,7 +466,7 @@ void Rme::Draw(wxWindow* canvas)
                     /// @begin Child
                     ImGui::SetCursorScreenPos({ ImRad::GetParentInnerRect().GetCenter().x-224, ImRad::GetParentInnerRect().Max.y-68 }); //overlayPos=AlignHCenter|AlignBottom,-224,-68
                     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 0, 0 });
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg));
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ChildBg));
                     if (ImGui::BeginChild("child10", { 432, 48 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMouseInputs))
                     {
                         /// @separator
@@ -679,7 +679,7 @@ void Rme::Draw(wxWindow* canvas)
 
                     /// @begin Child
                     ImGui::SetCursorScreenPos({ ImRad::GetParentInnerRect().Max.x-48, ImRad::GetParentInnerRect().GetCenter().y-140 }); //overlayPos=AlignRight|AlignVCenter,-48,-140
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg));
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ChildBg));
                     if (ImGui::BeginChild("child20", { 24, 360 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
                     {
                         RmeLayout::addMapKeepout(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
@@ -797,7 +797,7 @@ void Rme::Draw(wxWindow* canvas)
                     ImGui::SetCursorScreenPos({ ImRad::GetParentInnerRect().GetCenter().x-240, ImRad::GetParentInnerRect().Min.y+20 }); //overlayPos=AlignHCenter|AlignTop,-240,20
                     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 170, 15 });
                     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0);
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_ScrollbarBg));
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
                     if (ImGui::BeginChild("child21", { 480, 48 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMouseInputs))
                     {
                         /// @separator
@@ -1249,7 +1249,7 @@ void Rme::Draw(wxWindow* canvas)
 
                         /// @begin Button
                         ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0xff0000ff);
+                        ImGui::PushStyleColor(ImGuiCol_Button, 0xff6767ff);
                         ImGui::Button("Delete", { 80, 0 });
                         vb02321.UpdateSize(0, ImRad::VBox::ItemSize);
                         hb02322.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, 80);

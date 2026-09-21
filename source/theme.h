@@ -22,7 +22,7 @@
 
 class wxWindow;
 
-// Central dark theme for the editor, based on the "Tokyo Night" palette.
+// Central dark theme for the editor, based on the opencode "Aura" palette.
 //
 // The theme is applied in two steps:
 //   1. Theme::Initialize() requests the dark appearance from the platform so

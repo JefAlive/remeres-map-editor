@@ -449,6 +449,11 @@ void drawPanelSizers() {
 	s_right_panel_width =
 		std::clamp(s_right_panel_width, kPanelMinRightWidth, avail.x - s_left_panel_width - kPanelMinCenterWidth);
 
+	// The splitter is painted with ImGuiCol_Separator at rest; hide the bar
+	// until hovered so only the interaction gives it away. ImGuiCol_Separator
+	// is used by plain separators elsewhere, so the override is scoped here.
+	ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+
 	// Divider between the left panel and the rest of the row.
 	const ImRect left_bb{
 		ImVec2(row_pos.x + s_left_panel_width, row_pos.y),
@@ -471,6 +476,8 @@ void drawPanelSizers() {
 	ImGui::SplitterBehavior(right_bb, ImGui::GetID("##RmeSplitRight"), ImGuiAxis_X, &right_size1, &right_size2,
 		kPanelMinCenterWidth + kPanelMinLeftWidth, kPanelMinRightWidth, 8.0f, 0.0f, 0);
 	s_right_panel_width = right_size2;
+
+	ImGui::PopStyleColor();
 }
 
 } // namespace RmeLayout

@@ -47,9 +47,109 @@ namespace {
 		style.FramePadding = ImVec2(8.0f, 3.0f);
 		style.ItemSpacing = ImVec2(8.0f, 4.0f);
 
-		style.Colors[ImGuiCol_WindowBg] = ImVec4(0.086f, 0.094f, 0.110f, 1.00f);
-		style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
-		style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.30f, 0.66f, 1.00f, 1.00f);
+		const auto col = [](unsigned int hex, float a = 1.0f) {
+			return ImVec4(
+				((hex >> 16) & 0xFF) / 255.0f,
+				((hex >> 8) & 0xFF) / 255.0f,
+				(hex & 0xFF) / 255.0f,
+				a);
+		};
+
+		// Aura theme (opencode packages/ui/src/theme/themes/aura.json dark
+// palette plus the TUI accent tokens). Surfaces stay dark and neutral --
+// the purple primary is reserved for interactive labels: active tab,
+// checkbox, button hover/active, selection, caret, drag target.
+		const ImVec4 bg        = col(0x15141b); // neutral (window)
+		const ImVec4 deep      = col(0x101016); // wells / deep panels
+		const ImVec4 panel     = col(0x1c1c23); // lifted surfaces
+		const ImVec4 popup     = col(0x23232b); // floating surfaces
+		const ImVec4 neutral   = col(0x2d2d2d); // border / scrollbar
+		const ImVec4 muted     = col(0x6d6a7e); // comment / tree lines
+		const ImVec4 soft      = col(0x858298); // disabled text (less dim)
+
+		const ImVec4 fg        = col(0xedecee); // ink
+
+		const ImVec4 purple    = col(0xa277ff); // primary
+		const ImVec4 pink      = col(0xf694ff); // secondary
+		const ImVec4 blue      = col(0x82e2ff); // info
+		const ImVec4 cyanGreen = col(0x61ffca); // success
+		const ImVec4 amber     = col(0xffca85); // warning
+		const ImVec4 red       = col(0xff6767); // error
+
+		style.Colors[ImGuiCol_Text] = fg;
+		style.Colors[ImGuiCol_TextDisabled] = soft;
+		style.Colors[ImGuiCol_TextSelectedBg] = col(0xa277ff, 0.40f);
+		style.Colors[ImGuiCol_TextLink] = blue;
+
+		style.Colors[ImGuiCol_WindowBg] = bg;
+		style.Colors[ImGuiCol_ChildBg] = panel;
+		style.Colors[ImGuiCol_PopupBg] = popup;
+		style.Colors[ImGuiCol_TitleBg] = deep;
+		style.Colors[ImGuiCol_TitleBgActive] = panel;
+		style.Colors[ImGuiCol_TitleBgCollapsed] = bg;
+		style.Colors[ImGuiCol_MenuBarBg] = deep;
+
+		style.Colors[ImGuiCol_Border] = col(0x2d2d2d, 0.80f);
+		style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+
+		style.Colors[ImGuiCol_FrameBg] = panel;
+		style.Colors[ImGuiCol_FrameBgHovered] = col(0xa277ff, 0.30f);
+		style.Colors[ImGuiCol_FrameBgActive] = col(0xa277ff, 0.45f);
+
+		style.Colors[ImGuiCol_CheckMark] = purple;
+		style.Colors[ImGuiCol_CheckboxSelectedBg] = col(0xa277ff, 0.40f);
+		style.Colors[ImGuiCol_SliderGrab] = purple;
+		style.Colors[ImGuiCol_SliderGrabActive] = pink;
+		style.Colors[ImGuiCol_InputTextCursor] = purple;
+
+		style.Colors[ImGuiCol_Button] = panel;
+		style.Colors[ImGuiCol_ButtonHovered] = col(0xa277ff, 0.85f);
+		style.Colors[ImGuiCol_ButtonActive] = purple;
+
+		style.Colors[ImGuiCol_Header] = col(0xa277ff, 0.45f);
+		style.Colors[ImGuiCol_HeaderHovered] = col(0xa277ff, 0.75f);
+		style.Colors[ImGuiCol_HeaderActive] = col(0xa277ff, 1.0f);
+		style.Colors[ImGuiCol_Separator] = neutral;
+		style.Colors[ImGuiCol_SeparatorHovered] = amber;
+		style.Colors[ImGuiCol_SeparatorActive] = pink;
+		style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+		style.Colors[ImGuiCol_ResizeGripHovered] = purple;
+		style.Colors[ImGuiCol_ResizeGripActive] = pink;
+
+		style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+		style.Colors[ImGuiCol_ScrollbarGrab] = neutral;
+		style.Colors[ImGuiCol_ScrollbarGrabHovered] = muted;
+		style.Colors[ImGuiCol_ScrollbarGrabActive] = purple;
+
+		style.Colors[ImGuiCol_Tab] = deep;
+		style.Colors[ImGuiCol_TabHovered] = col(0xa277ff, 0.55f);
+		style.Colors[ImGuiCol_TabSelected] = purple;
+		style.Colors[ImGuiCol_TabSelectedOverline] = pink;
+		style.Colors[ImGuiCol_TabDimmed] = deep;
+		style.Colors[ImGuiCol_TabDimmedSelected] = purple;
+		style.Colors[ImGuiCol_TabDimmedSelectedOverline] = muted;
+		style.Colors[ImGuiCol_UnsavedMarker] = red;
+
+		style.Colors[ImGuiCol_PlotLines] = purple;
+		style.Colors[ImGuiCol_PlotLinesHovered] = pink;
+		style.Colors[ImGuiCol_PlotHistogram] = cyanGreen;
+		style.Colors[ImGuiCol_PlotHistogramHovered] = blue;
+
+		style.Colors[ImGuiCol_TableHeaderBg] = panel;
+		style.Colors[ImGuiCol_TableBorderStrong] = neutral;
+		style.Colors[ImGuiCol_TableBorderLight] = col(0x2d2d2d, 0.5f);
+		style.Colors[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+		style.Colors[ImGuiCol_TableRowBgAlt] = col(0x1c1c23, 0.5f);
+
+		style.Colors[ImGuiCol_DragDropTarget] = purple;
+		style.Colors[ImGuiCol_DragDropTargetBg] = col(0xa277ff, 0.20f);
+
+		style.Colors[ImGuiCol_NavCursor] = purple;
+		style.Colors[ImGuiCol_NavWindowingHighlight] = col(0xf694ff, 0.70f);
+		style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
+		style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.50f);
+
+		style.Colors[ImGuiCol_TreeLines] = muted;
 	}
 }
 
