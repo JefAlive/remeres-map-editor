@@ -109,6 +109,11 @@ std::chrono::steady_clock::time_point s_minimap_built_at = std::chrono::steady_c
 		return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
 	}
 
+	// Hover info for the bottom bar (position / itemId / name), updated by
+	// MapCanvas::UpdatePositionStatus on every mouse move over the map.
+	RmeLayout::HoverInfo s_hover_info;
+	RmeLayout::ZoomInfo s_zoom_info;
+
 void buildMinimapTexture(Map& map, int floor) {
 	int min_x = 0x10000, min_y = 0x10000;
 	int max_x = 0x00000, max_y = 0x00000;
@@ -266,18 +271,23 @@ namespace RmeLayout {
 
 // wx-world calls (menu events, brush switches, dialogs, synchronous repaints)
 // MUST NOT run inside the ImGui frame: modals and Update() re-enter NewFrame.
-// Defer them to the wx event loop past the current paint; if no frame canvas
-// is known (never the case from Draw), run inline.
+// Defer them to the wx event loop past the current paint. Dispatch through
+// g_gui.root (always alive) rather than s_frame_canvas, which dangles when
+// the map tab is destroyed between the click and the deferred execution.
 template <typename Fn>
 static void DeferWx(Fn&& fn) {
 	if (wxWindow* canvas = s_frame_canvas) {
-		canvas->CallAfter(std::forward<Fn>(fn));
+		std::printf("RME: DeferWx - CallAfter %p\n", &fn);
+		//canvas->CallAfter(std::forward<Fn>(fn));
+		fn();
 	} else {
+		std::printf("RME: DeferWx - CallInstantly %p\n", &fn);
 		fn();
 	}
 }
 
 static void FireMenuCommandNow(MenuBar::ActionID id, bool check) {
+	std::printf("RME: FireMenuCommandNow %d check=%d\n", static_cast<int>(id), check);
 	if (!g_gui.root) {
 		return;
 	}
@@ -920,9 +930,11 @@ bool isMapPoint(int x, int y) {
 bool isMapKeepout(int x, int y) {
 	for (const Rect& keepout : s_map_keepouts) {
 		if (pointInRect(keepout, static_cast<float>(x), static_cast<float>(y))) {
+			std::printf("RME: keepout at %d,%d\n", x, y);
 			return true;
 		}
 	}
+	std:printf("RME: no keepout at %d,%d\n", x, y);
 	return false;
 }
 
@@ -1155,6 +1167,37 @@ void drawPanelSizers() {
 	s_right_panel_width = right_size2;
 
 	ImGui::PopStyleColor();
+}
+
+void setHoverInfo(const HoverInfo& info) {
+	s_hover_info = info;
+}
+
+const HoverInfo& getHoverInfo() {
+	return s_hover_info;
+}
+
+void setZoomInfo(const ZoomInfo& info) {
+	s_zoom_info = info;
+}
+
+const ZoomInfo& getZoomInfo() {
+	return s_zoom_info;
+}
+
+void MenuButton(const char* label, int actionId) {
+	const bool has_editor = g_gui.IsEditorOpen();
+	if (!has_editor) {
+		ImGui::BeginDisabled();
+	}
+	const bool pressed = ImGui::Button(label, { 0, 0 });
+	if (!has_editor) {
+		ImGui::EndDisabled();
+	}
+	if (pressed) {
+		const auto id = static_cast<MenuBar::ActionID>(actionId);
+		DeferWx([id]() { FireMenuCommandNow(id, false); });
+	}
 }
 
 } // namespace RmeLayout

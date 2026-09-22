@@ -132,4 +132,26 @@ namespace RmeLayout {
 	// frame at the start of the row layout, before any panel child is drawn.
 	void drawPanelSizers();
 
+	// Hover info: position/ItemId/Name shown in the bottom bar, updated by
+	// MapCanvas::UpdatePositionStatus on every mouse move over the map.
+	struct HoverInfo {
+		int x = 0;
+		int y = 0;
+		int z = 0;
+		int itemId = 0;
+		std::string itemName;
+	};
+	void setHoverInfo(const HoverInfo& info);
+	const HoverInfo& getHoverInfo();
+
+	struct ZoomInfo {
+		int percentage = 100;
+	};
+	void setZoomInfo(const ZoomInfo& info);
+	const ZoomInfo& getZoomInfo();
+
+	// Bottom-bar menu button: fires a wx menu action (non-toggle) via
+	// DeferWx. Disabled when no editor is open.
+	void MenuButton(const char* label, int actionId);
+
 } // namespace RmeLayout

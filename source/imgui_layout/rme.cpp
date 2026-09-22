@@ -4,6 +4,7 @@
 #include "rme.h"
 #include "rme_widget.h"
 #include "gui.h"
+#include "main_menubar.h"
 
 Rme g_rme;
 
@@ -803,41 +804,42 @@ void Rme::Draw(wxWindow* canvas)
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
                 if (ImGui::BeginChild("child23", { hb013.GetSize(), 0 }, ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoNavInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar))
                 {
+                    RmeLayout::addMapKeepout(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
                     /// @separator
 
                     /// @begin Button
                     hb0121.BeginLayout();
-                    ImGui::Button("New", { 0, 0 });
+                    RmeLayout::MenuButton("New", MenuBar::NEW);
                     hb0121.AddSize(0 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Open", { 0, 0 });
+                    RmeLayout::MenuButton("Open", MenuBar::OPEN);
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Save", { 0, 0 });
+                    RmeLayout::MenuButton("Save", MenuBar::SAVE);
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Save As", { 0, 0 });
+                    RmeLayout::MenuButton("Save As", MenuBar::SAVE_AS);
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("<", { 0, 0 });
+                    RmeLayout::MenuButton("<", MenuBar::UNDO);
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button(">", { 0, 0 });
+                    RmeLayout::MenuButton(">", MenuBar::REDO);
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Button
 
@@ -849,7 +851,10 @@ void Rme::Draw(wxWindow* canvas)
 
                     /// @begin Text
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::TextUnformatted("Position: [x, y, z]");
+                    {
+                        const auto& h = RmeLayout::getHoverInfo();
+                        ImGui::Text("Position: [%d, %d, %d]", h.x, h.y, h.z);
+                    }
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Text
 
@@ -861,7 +866,14 @@ void Rme::Draw(wxWindow* canvas)
 
                     /// @begin Text
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::TextUnformatted("ItemId: 4600");
+                    {
+                        const auto& h = RmeLayout::getHoverInfo();
+                        if (h.itemId > 0) {
+                            ImGui::Text("ItemId: %d", h.itemId);
+                        } else {
+                            ImGui::TextUnformatted("ItemId: -");
+                        }
+                    }
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Text
 
@@ -873,7 +885,10 @@ void Rme::Draw(wxWindow* canvas)
 
                     /// @begin Text
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::TextUnformatted("Name: Shallow Water");
+                    {
+                        const auto& h = RmeLayout::getHoverInfo();
+                        ImGui::Text("Name: %s", h.itemName.empty() ? "Nothing" : h.itemName.c_str());
+                    }
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Text
 
@@ -909,7 +924,10 @@ void Rme::Draw(wxWindow* canvas)
 
                     /// @begin Text
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::TextUnformatted("Zoom: 100%");
+                    {
+                        const auto& h = RmeLayout::getZoomInfo();
+                        ImGui::Text("Zoom: %d%s", h.percentage, "%");
+                    }
                     hb0121.AddSize(1 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::ItemSize);
                     /// @end Text
 

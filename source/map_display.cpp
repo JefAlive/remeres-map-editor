@@ -310,16 +310,18 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 		int fw, fh;
 		GetMapWindow()->GetViewSize(&fw, &fh);
 		glViewport(0, 0, fw, fh);
+		
 		// Backdrop follows the active Theme palette (Aura #15141b by default)
 		// so the editor never shows a pure-black void behind the map surface
 		// and panels. Read per-frame: tracks runtime theme switches with no
 		// extra refresh needed.
 		const wxColour backdrop = Theme::Bg();
 		glClearColor(
-			backdrop.Red() / 255.0f,
-			backdrop.Green() / 255.0f,
-			backdrop.Blue() / 255.0f,
-			1.0f);
+            backdrop.Red() / 255.0f,
+            backdrop.Green() / 255.0f,
+            backdrop.Blue() / 255.0f,
+        	0.0f);
+			// TODO: alpha?
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		drawer->SetupVars();
@@ -554,6 +556,11 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 
 	const auto tile = editor.getMap().getTile(map_x, map_y, floor);
 
+	RmeLayout::HoverInfo hover;
+	hover.x = map_x;
+	hover.y = map_y;
+	hover.z = floor;
+
 	std::string description = "Nothing";
 
 	if (editor.IsLive()) {
@@ -562,12 +569,17 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 
 	if (!tile) {
 		g_gui.SetStatusText(description, 1);
+		hover.itemId = 0;
+		hover.itemName = "Nothing";
+		RmeLayout::setHoverInfo(hover);
 		return;
 	}
 
 	description.clear();
 	if (tile->spawnMonster && g_settings.getInteger(Config::SHOW_SPAWNS_MONSTER)) {
 		description = fmt::format("Monster spawn radius: {}", tile->spawnMonster->getSize());
+		hover.itemId = 0;
+		hover.itemName = description;
 	} else if (!tile->monsters.empty() && g_settings.getInteger(Config::SHOW_MONSTERS)) {
 		std::vector<std::string> texts;
 		for (const auto monster : tile->monsters) {
@@ -575,10 +587,16 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 			texts.emplace_back(fmt::format("Monster \"{}\", spawntime: {}, weight: {}", monster->getName(), monster->getSpawnMonsterTime(), monsterWeight));
 		}
 		description = fmt::format("{}", fmt::join(texts, " - "));
+		hover.itemId = 0;
+		hover.itemName = description;
 	} else if (tile->spawnNpc && g_settings.getInteger(Config::SHOW_SPAWNS_NPC)) {
 		description = fmt::format("Npc spawn radius: {}", tile->spawnNpc->getSize());
+		hover.itemId = 0;
+		hover.itemName = description;
 	} else if (tile->npc && g_settings.getInteger(Config::SHOW_NPCS)) {
 		description = fmt::format("NPC \"{}\", spawntime: {}", tile->npc->getName(), tile->npc->getSpawnNpcTime());
+		hover.itemId = 0;
+		hover.itemName = description;
 	} else if (const auto item = tile->getTopItem()) {
 		description = fmt::format("Item \"{}\", id: {}", item->getName(), item->getID());
 
@@ -587,11 +605,17 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 		description = item->getActionID() ? fmt::format("{}, aid: {}", description, item->getActionID()) : description;
 
 		description = item->hasWeight() ? fmt::format("{}, weight: {:.2f}", description, item->getWeight()) : description;
+
+		hover.itemId = item->getID();
+		hover.itemName = item->getName();
 	} else {
 		description = "Nothing";
+		hover.itemId = 0;
+		hover.itemName = "Nothing";
 	}
 
 	g_gui.SetStatusText(description, 1);
+	RmeLayout::setHoverInfo(hover);
 }
 
 void MapCanvas::UpdateZoomStatus() {
@@ -599,6 +623,10 @@ void MapCanvas::UpdateZoomStatus() {
 	wxString ss;
 	ss << "zoom: " << percentage << "%";
 	g_gui.SetStatusText(ss, 3);
+
+	RmeLayout::ZoomInfo zoomInfo;
+	zoomInfo.percentage = percentage;
+	RmeLayout::setZoomInfo(zoomInfo);
 }
 
 void MapCanvas::OnMouseMove(wxMouseEvent &event) {
@@ -779,17 +807,28 @@ void MapCanvas::OnMouseMove(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseLeftRelease(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseLeftRelease triggered\n");
+
 	RmeLayout::forwardMouseButton(0, false);
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
+
 	OnMouseActionRelease(event);
 }
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseLeftClick triggered\n");
+	
 	RmeLayout::forwardMouseButton(0, true);
 	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
 	// independent of the capture state below, which lags one frame behind.
 	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
 		return;
 	}
+
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -798,12 +837,15 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseLeftDoubleClick triggered\n");
+	
 	RmeLayout::forwardMouseButton(0, true);
 	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
 	// independent of the capture state below, which lags one frame behind.
 	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
 		return;
 	}
+
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -860,12 +902,15 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseCenterClick(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseCenterClick triggered\n");
+	
 	RmeLayout::forwardMouseButton(2, true);
 	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
 	// independent of the capture state below, which lags one frame behind.
 	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
 		return;
 	}
+
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -878,7 +923,15 @@ void MapCanvas::OnMouseCenterClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseCenterRelease(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseCenterRelease triggered\n");
+
 	RmeLayout::forwardMouseButton(2, false);
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
+
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
 		OnMousePropertiesRelease(event);
 	} else {
@@ -887,12 +940,15 @@ void MapCanvas::OnMouseCenterRelease(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseRightClick(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseRightClick triggered\n");
+	
 	RmeLayout::forwardMouseButton(1, true);
 	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
 	// independent of the capture state below, which lags one frame behind.
 	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
 		return;
 	}
+	
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -905,7 +961,15 @@ void MapCanvas::OnMouseRightClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseRightRelease(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseRightRelease triggered\n");
+
 	RmeLayout::forwardMouseButton(1, false);
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
+
 	if (g_settings.getInteger(Config::SWITCH_MOUSEBUTTONS)) {
 		OnMouseCameraRelease(event);
 	} else {
@@ -914,6 +978,8 @@ void MapCanvas::OnMouseRightRelease(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseActionClick(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseActionClick triggered\n");
+
 	// Check if clicking on overlay scrollbar
 	int mx = event.GetX();
 	int my = event.GetY();
@@ -1305,6 +1371,8 @@ void MapCanvas::OnMouseActionClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseActionRelease(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseActionRelease triggered\n");
+
 	// End overlay scrollbar drag
 	if (scrollbar_dragging_v || scrollbar_dragging_h) {
 		scrollbar_dragging_v = false;
@@ -1638,6 +1706,8 @@ void MapCanvas::OnMouseActionRelease(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseCameraClick(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseCameraClick triggered\n");
+
 	SetFocus();
 
 	last_mmb_click_x = event.GetX();
@@ -1664,6 +1734,8 @@ void MapCanvas::OnMouseCameraClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMouseCameraRelease(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMouseCameraRelease triggered\n");
+
 	SetFocus();
 	screendragging = false;
 	if (event.ControlDown()) {
@@ -1692,6 +1764,8 @@ void MapCanvas::OnMouseCameraRelease(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMousePropertiesClick(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMousePropertiesClick triggered\n");
+
 	SetFocus();
 
 	int mouse_map_x, mouse_map_y;
@@ -1759,6 +1833,8 @@ void MapCanvas::OnMousePropertiesClick(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnMousePropertiesRelease triggered\n");
+
 	int mouse_map_x, mouse_map_y;
 	ScreenToMap(event.GetX(), event.GetY(), &mouse_map_x, &mouse_map_y);
 
@@ -1917,11 +1993,6 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
 
 void MapCanvas::OnWheel(wxMouseEvent &event) {
 	RmeLayout::forwardMouseWheel(event.GetWheelRotation());
-	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
-	// independent of the capture state below, which lags one frame behind.
-	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
-		return;
-	}
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -1988,10 +2059,14 @@ void MapCanvas::OnWheel(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnLoseMouse(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnLoseMouse triggered\n");
+
 	Refresh();
 }
 
 void MapCanvas::OnGainMouse(wxMouseEvent &event) {
+	std::printf("[debug] MapCanvas::OnGainMouse triggered\n");
+
 	if (!event.LeftIsDown()) {
 		dragging = false;
 		boundbox_selection = false;
@@ -2005,6 +2080,8 @@ void MapCanvas::OnGainMouse(wxMouseEvent &event) {
 }
 
 void MapCanvas::OnKeyDown(wxKeyEvent &event) {
+	std::printf("[debug] MapCanvas::OnKeyDown triggered\n");
+
 	RmeLayout::forwardKey(event.GetKeyCode(), event.GetUnicodeKey(), true,
 						  event.ControlDown(), event.ShiftDown(), event.AltDown());
 	if (RmeLayout::wantsCaptureKeyboard()) {
@@ -2554,18 +2631,24 @@ bool MapCanvas::DispatchMenuShortcut(wxKeyEvent &event) {
 #endif
 
 void MapCanvas::OnKeyUp(wxKeyEvent &event) {
+	std::printf("[debug] MapCanvas::OnKeyUp triggered\n");
+
 	RmeLayout::forwardKey(event.GetKeyCode(), event.GetUnicodeKey(), false,
 						  event.ControlDown(), event.ShiftDown(), event.AltDown());
 	keyCode = WXK_NONE;
 }
 
 void MapCanvas::OnCopy(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnCopy triggered\n");
+
 	if (g_gui.IsSelectionMode()) {
 		editor.copybuffer.copy(editor, GetFloor());
 	}
 }
 
 void MapCanvas::OnCut(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnCut triggered\n");
+
 	if (g_gui.IsSelectionMode()) {
 		editor.copybuffer.cut(editor, GetFloor());
 	}
@@ -2573,16 +2656,22 @@ void MapCanvas::OnCut(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnPaste(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnPaste triggered\n");
+
 	g_gui.DoPaste();
 	g_gui.RefreshView();
 }
 
 void MapCanvas::OnDelete(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnDelete triggered\n");
+
 	editor.destroySelection();
 	g_gui.RefreshView();
 }
 
 void MapCanvas::OnCopyPosition(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnCopyPosition triggered\n");
+
 	if (editor.hasSelection()) {
 		auto minPos = editor.getSelection().minPosition();
 		auto maxPos = editor.getSelection().maxPosition();
@@ -2603,6 +2692,8 @@ void MapCanvas::OnCopyPosition(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnCopyItemId(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnCopyItemId triggered\n");
+
 	ASSERT(editor.getSelection().size() == 1);
 
 	if (wxTheClipboard->Open()) {
@@ -2621,6 +2712,8 @@ void MapCanvas::OnCopyItemId(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnCopyName(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnCopyName triggered\n");
+
 	ASSERT(editor.getSelection().size() == 1);
 
 	if (wxTheClipboard->Open()) {
@@ -2639,6 +2732,8 @@ void MapCanvas::OnCopyName(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnBrowseTile(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnBrowseTile triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2667,6 +2762,8 @@ void MapCanvas::OnBrowseTile(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnRotateItem(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnRotateItem triggered\n");
+
 	if (!editor.hasSelection()) {
 		return;
 	}
@@ -2699,6 +2796,8 @@ void MapCanvas::OnRotateItem(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnGotoDestination(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnGotoDestination triggered\n");
+
 	Tile* tile = editor.getSelection().getSelectedTile();
 	ItemVector selected_items = tile->getSelectedItems();
 	ASSERT(selected_items.size() > 0);
@@ -2710,6 +2809,8 @@ void MapCanvas::OnGotoDestination(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnCopyDestination(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnCopyDestination triggered\n");
+
 	Tile* tile = editor.getSelection().getSelectedTile();
 	ItemVector selected_items = tile->getSelectedItems();
 	ASSERT(selected_items.size() > 0);
@@ -2723,6 +2824,8 @@ void MapCanvas::OnCopyDestination(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSwitchDoor(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSwitchDoor triggered\n");
+
 	Tile* tile = editor.getSelection().getSelectedTile();
 
 	Action* action = editor.createAction(ACTION_SWITCHDOOR);
@@ -2742,6 +2845,8 @@ void MapCanvas::OnSwitchDoor(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectRAWBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectRAWBrush triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2757,6 +2862,8 @@ void MapCanvas::OnSelectRAWBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectGroundBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectGroundBrush triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2772,6 +2879,8 @@ void MapCanvas::OnSelectGroundBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectDoodadBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectDoodadBrush triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2787,6 +2896,8 @@ void MapCanvas::OnSelectDoodadBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectDoorBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectDoorBrush triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2802,6 +2913,8 @@ void MapCanvas::OnSelectDoorBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectWallBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectWallBrush triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2818,6 +2931,8 @@ void MapCanvas::OnSelectWallBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectCarpetBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectCarpetBrush triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2834,6 +2949,8 @@ void MapCanvas::OnSelectCarpetBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectTableBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectTableBrush triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
@@ -2850,6 +2967,8 @@ void MapCanvas::OnSelectTableBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectHouseBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectHouseBrush triggered\n");
+
 	Tile* tile = editor.getSelection().getSelectedTile();
 	if (!tile) {
 		return;
@@ -2865,6 +2984,8 @@ void MapCanvas::OnSelectHouseBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectMonsterBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectMonsterBrush triggered\n");
+
 	Tile* tile = editor.getSelection().getSelectedTile();
 	if (!tile) {
 		return;
@@ -2876,10 +2997,14 @@ void MapCanvas::OnSelectMonsterBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectSpawnBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectSpawnBrush triggered\n");
+
 	g_gui.SelectBrush(g_gui.spawn_brush, TILESET_MONSTER);
 }
 
 void MapCanvas::OnSelectNpcBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectNpcBrush triggered\n");
+
 	Tile* tile = editor.getSelection().getSelectedTile();
 	if (!tile) {
 		return;
@@ -2891,10 +3016,14 @@ void MapCanvas::OnSelectNpcBrush(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectSpawnNpcBrush(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectSpawnNpcBrush triggered\n");
+
 	g_gui.SelectBrush(g_gui.spawn_npc_brush, TILESET_NPC);
 }
 
 void MapCanvas::OnSelectMoveTo(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnSelectMoveTo triggered\n");
+
 	if (editor.selection.size() != 1) {
 		return;
 	}
@@ -2940,6 +3069,8 @@ void MapCanvas::OnSelectMoveTo(wxCommandEvent &WXUNUSED(event)) {
 }
 
 void MapCanvas::OnProperties(wxCommandEvent &WXUNUSED(event)) {
+	std::printf("[debug] MapCanvas::OnProperties triggered\n");
+
 	if (editor.getSelection().size() != 1) {
 		return;
 	}
