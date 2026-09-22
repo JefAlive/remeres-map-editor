@@ -12,6 +12,9 @@
 #include "editor.h"
 #include "gui.h"
 #include "gui_ids.h"
+#include "main_menubar.h"
+#include "settings.h"
+#include "theme.h"
 #include "map.h"
 #include "map_display.h"
 #include "map_drawer.h"
@@ -232,6 +235,88 @@ ImGuiKey mapKeyCode(int keyCode) {
 
 namespace RmeLayout {
 
+static void FireMenuCommand(MenuBar::ActionID id, bool check) {
+	if (!g_gui.root) {
+		return;
+	}
+	wxMenuBar* menu_bar = g_gui.root->GetMenuBar();
+	if (!menu_bar) {
+		return;
+	}
+	const int fullId = static_cast<int>(MAIN_FRAME_MENU) + static_cast<int>(id);
+	if (wxMenuItem* item = menu_bar->FindItem(fullId)) {
+		if (item->IsCheckable()) {
+			item->Check(check);
+		}
+	}
+	wxCommandEvent evt(wxEVT_COMMAND_MENU_SELECTED, fullId);
+	g_gui.root->GetEventHandler()->ProcessEvent(evt);
+}
+
+void FireMenuToggle(int actionId) {
+	const auto id = static_cast<MenuBar::ActionID>(actionId);
+	if (!g_gui.root) {
+		return;
+	}
+	wxMenuBar* menu_bar = g_gui.root->GetMenuBar();
+	if (!menu_bar) {
+		return;
+	}
+	const int fullId = static_cast<int>(MAIN_FRAME_MENU) + static_cast<int>(id);
+	bool check = true;
+	if (wxMenuItem* item = menu_bar->FindItem(fullId)) {
+		check = !item->IsChecked();
+	}
+	FireMenuCommand(id, check);
+}
+
+void FireMenuFloor(int floor) {
+	if (floor < rme::MapMinLayer || floor > rme::MapMaxLayer) {
+		return;
+	}
+	// Uncheck the whole radio group first (mirrors UpdateFloorMenu) instead
+	// of relying on automatic radio unchecking, so OnChangeFloor always finds
+	// exactly one checked entry.
+	if (g_gui.root) {
+		if (wxMenuBar* menu_bar = g_gui.root->GetMenuBar()) {
+			for (int i = rme::MapMinLayer; i <= rme::MapMaxLayer; ++i) {
+				const int id = static_cast<int>(MAIN_FRAME_MENU) + static_cast<int>(MenuBar::FLOOR_0 + i);
+				if (wxMenuItem* item = menu_bar->FindItem(id)) {
+					item->Check(false);
+				}
+			}
+		}
+	}
+	FireMenuCommand(static_cast<MenuBar::ActionID>(MenuBar::FLOOR_0 + floor), true);
+}
+
+void FloorButton(const char* label, int floor) {
+	const bool has_editor = g_gui.IsEditorOpen();
+	const int current = has_editor ? g_gui.GetCurrentFloor() : -1;
+	if (!has_editor) {
+		ImGui::BeginDisabled();
+	}
+	if (floor == current) {
+		// Same accent as a selected tab: full-strength primary.
+		const uint32_t accent = Theme::Rgb(Theme::TKN_Purple);
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(
+			((accent >> 16) & 0xFF) / 255.0f,
+			((accent >> 8) & 0xFF) / 255.0f,
+			(accent & 0xFF) / 255.0f,
+			1.0f));
+	} else {
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+	}
+	const bool pressed = ImGui::Button(label, { 24, 24 });
+	ImGui::PopStyleColor();
+	if (!has_editor) {
+		ImGui::EndDisabled();
+	}
+	if (pressed && has_editor) {
+		FireMenuFloor(floor);
+	}
+}
+
 bool Begin(wxWindow* canvas) {
 	if (!canvas || !ImGuiOverlay::ensureInitialized()) {
 		return false;
@@ -269,7 +354,20 @@ bool Begin(wxWindow* canvas) {
 
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui::NewFrame();
+	// Bidirectional toggle sync (menu <-> layout) for the plain-bool
+	// checkboxes the generated layout owns: seed them from the settings the
+	// wx menu writes, and route user toggles back through the same menu
+	// commands so settings, refresh, status text and menu checks stay in
+	// sync by construction.
+	g_rme.value4 = g_settings.getBoolean(Config::SHOW_LIGHTS);
+	g_rme.value16 = g_settings.getBoolean(Config::USE_AUTOMAGIC);
 	g_rme.Draw(canvas);
+	if (g_rme.value4 != g_settings.getBoolean(Config::SHOW_LIGHTS)) {
+		FireMenuToggle(static_cast<int>(MenuBar::SHOW_LIGHTS));
+	}
+	if (g_rme.value16 != g_settings.getBoolean(Config::USE_AUTOMAGIC)) {
+		FireMenuToggle(static_cast<int>(MenuBar::AUTOMAGIC));
+	}
 	return true;
 }
 
@@ -589,6 +687,15 @@ bool isMapPoint(int x, int y) {
 		}
 	}
 	return true;
+}
+
+bool isMapKeepout(int x, int y) {
+	for (const Rect& keepout : s_map_keepouts) {
+		if (pointInRect(keepout, static_cast<float>(x), static_cast<float>(y))) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void DrawMinimap(float availWidth, float availHeight) {

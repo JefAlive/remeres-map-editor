@@ -686,105 +686,77 @@ void Rme::Draw(wxWindow* canvas)
                         /// @separator
 
                         /// @begin Button
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("+7", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("+7", 0);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("+6", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("+6", 1);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("+5", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("+5", 2);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("+4", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("+4", 3);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("+3", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("+3", 4);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("+2", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("+2", 5);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("+1", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("+1", 6);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::Button("0", { 24, 24 });
+                        RmeLayout::FloorButton("0", 7);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("-1", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("-1", 8);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("-2", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("-2", 9);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("-3", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("-3", 10);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("-4", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("-4", 11);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("-5", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("-5", 12);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("-6", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("-6", 13);
                         /// @end Button
 
                         /// @begin Button
                         ImRad::Spacing(-1);
-                        ImGui::PushStyleColor(ImGuiCol_Button, 0x00ffffff);
-                        ImGui::Button("-7", { 24, 24 });
-                        ImGui::PopStyleColor();
+                        RmeLayout::FloorButton("-7", 14);
                         /// @end Button
 
                         /// @separator

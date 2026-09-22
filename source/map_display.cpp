@@ -785,6 +785,11 @@ void MapCanvas::OnMouseLeftRelease(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(0, true);
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -794,6 +799,11 @@ void MapCanvas::OnMouseLeftClick(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(0, true);
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -851,6 +861,11 @@ void MapCanvas::OnMouseLeftDoubleClick(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseCenterClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(2, true);
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -873,6 +888,11 @@ void MapCanvas::OnMouseCenterRelease(wxMouseEvent &event) {
 
 void MapCanvas::OnMouseRightClick(wxMouseEvent &event) {
 	RmeLayout::forwardMouseButton(1, true);
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;
@@ -1878,13 +1898,11 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
 
 	if (RmeLayout::isOverlayActive() && RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The release landed on the ImGui-owned live map viewport: the Rme
-		// layout opens its native popup on the next paint instead of the
-		// legacy wx menu below.
+		// layout opens its native popup on the next paint.
 		RmeLayout::openMapContextMenu();
-	} else {
-		popup_menu->Update();
-		PopupMenu(popup_menu);
 	}
+	// The legacy wx popup is retired: releases outside the live viewport
+	// intentionally open nothing (that input belongs to the overlay UI).
 
 	editor.resetActionsTimer();
 	dragging = false;
@@ -1899,6 +1917,11 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
 
 void MapCanvas::OnWheel(wxMouseEvent &event) {
 	RmeLayout::forwardMouseWheel(event.GetWheelRotation());
+	// ImGui-owned keepouts (floor-button strip, ...) never drive the editor,
+	// independent of the capture state below, which lags one frame behind.
+	if (RmeLayout::isMapKeepout(event.GetX(), event.GetY())) {
+		return;
+	}
 	if (RmeLayout::wantsCaptureMouse() && !RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
 		// The fixed-cadence RenderTimer repaints within 16 ms.
 		return;

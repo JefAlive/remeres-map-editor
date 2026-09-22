@@ -52,6 +52,11 @@ namespace RmeLayout {
 	// rects (interactive overlays like the floor buttons). MapCanvas asks this
 	// before deciding whether an ImGui capture should swallow a mouse event.
 	bool isMapPoint(int x, int y);
+	// True when the point lands on a keepout rect (ImGui-owned UI such as the
+	// floor-button strip). Unlike isMapPoint, this does not depend on ImGui's
+	// capture state, which lags one frame behind fast clicks: press handlers
+	// use it to never drive the editor from overlay UI.
+	bool isMapKeepout(int x, int y);
 
 	// Recording the map viewport / keepout rects, called from the Rme layout
 	// while it draws each frame.
@@ -72,6 +77,19 @@ namespace RmeLayout {
 	// MapCanvas::OnXxx callbacks as the wx menu.
 	void openMapContextMenu();
 	void DrawMapContextMenu(MapCanvas* canvas);
+
+	// Fire the wx menu command behind a toggle/check item (SHOW_LIGHTS,
+	// AUTOMAGIC, ...): toggles the actual menu check and dispatches the same
+	// wxCommandEvent the menu would send, so ImGui widgets reuse the existing
+	// callbacks (settings, refresh, status text) instead of duplicating them.
+	// Mirrors the keyboard-shortcut path in MapCanvas::DispatchMenuShortcut.
+	void FireMenuToggle(int actionId);
+	// Same for the FLOOR_0..15 radio group: checks the radio for `floor`.
+	void FireMenuFloor(int floor);
+	// Floor-strip button (labels "+7".."0".."-7", i.e. floor = 7 - k):
+	// accent-highlights the current floor and fires on click. Disabled with
+	// no map open (same guard as the menu, which needs an editor).
+	void FloorButton(const char* label, int floor);
 	// Presents the live map (rendered by MapDrawer into its offscreen surface)
 	// as an ImGui::Image inside the current window, aspect-fitted within the
 	// given available space, and records the drawn rect as the map viewport so
