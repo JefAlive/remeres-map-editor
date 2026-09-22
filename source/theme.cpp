@@ -126,6 +126,7 @@ namespace {
 		art->SetColour(wxAUI_DOCKART_BORDER_COLOUR, TokenColour(TKN_Border));
 		art->SetColour(wxAUI_DOCKART_GRIPPER_COLOUR, TokenColour(TKN_Muted));
 		manager->SetArtProvider(art);
+		manager->Update();
 		s_art_palette = s_palette;
 		s_art_applied = true;
 	}
@@ -325,6 +326,10 @@ void Apply(wxWindow* window) {
 	for (wxWindow* child : window->GetChildren()) {
 		Apply(child);
 	}
+
+	// SetBackgroundColour alone does not repaint on every port; queue a
+	// repaint so a runtime palette switch is visible immediately.
+	window->Refresh();
 }
 
 } // namespace Theme

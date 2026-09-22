@@ -36,6 +36,7 @@
 #include "browse_tile_window.h"
 
 #include "gl_imgui_overlay.h"
+#include "theme.h"
 #include "imgui_layout/rme_widget.h"
 #include "canvas_overlay.h"
 
@@ -309,9 +310,16 @@ void MapCanvas::OnPaint(wxPaintEvent &event) {
 		int fw, fh;
 		GetMapWindow()->GetViewSize(&fw, &fh);
 		glViewport(0, 0, fw, fh);
-		// Aura backdrop (#15141b) for the transparent layout, so the editor
-		// never shows a pure-black void behind the map surface and panels.
-		glClearColor(0.082f, 0.078f, 0.106f, 1.0f);
+		// Backdrop follows the active Theme palette (Aura #15141b by default)
+		// so the editor never shows a pure-black void behind the map surface
+		// and panels. Read per-frame: tracks runtime theme switches with no
+		// extra refresh needed.
+		const wxColour backdrop = Theme::Bg();
+		glClearColor(
+			backdrop.Red() / 255.0f,
+			backdrop.Green() / 255.0f,
+			backdrop.Blue() / 255.0f,
+			1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		drawer->SetupVars();
