@@ -2,7 +2,10 @@
 
 #include <wx/window.h>
 
+#include <string>
+
 class MapCanvas;
+class Brush;
 
 // Bridge between the wxWidgets MapCanvas and the ImRAD-generated editor layout
 // (Rme). The layout is an always-on overlay: every paint draws it on top of the
@@ -90,6 +93,30 @@ namespace RmeLayout {
 	// accent-highlights the current floor and fires on click. Disabled with
 	// no map open (same guard as the menu, which needs an editor).
 	void FloorButton(const char* label, int floor);
+
+	// Left-panel tool button: selects the editor brush on click (the same
+	// g_gui.SelectBrush call the wx brush toolbar makes), accent-highlighted
+	// while it is the current brush. Disabled with no map open.
+	void BrushButton(const char* label, Brush* brush);
+	// Left-panel "Single Select": enters selection mode, highlighted while
+	// selection mode is active. Disabled with no map open.
+	void SelectionModeButton(const char* label);
+	// Brush shape (BRUSHSHAPE_CIRCLE / BRUSHSHAPE_SQUARE as int): same
+	// g_gui.SetBrushShape call as the wx sizes toolbar, always marking the
+	// current shape. Independent from tool selection. Disabled with no map.
+	void BrushShapeButton(const char* label, int shape);
+
+	// Transient notification toaster, rendered where the "notification popup"
+	// placeholder sits (top-center over the map). Notify() queues a message
+	// (thread-safe: some producers run on worker threads); DrawNotifications()
+	// draws the live stack -- newest first, auto-expired after a few seconds.
+	// Replaces the legacy wxInfoBar and the field-0 status messages.
+	enum class ToastLevel {
+		Info, // blue token: confirmations, status changes
+		Warning, // orange token: load warnings, failures
+	};
+	void Notify(const std::string& text, ToastLevel level = ToastLevel::Info);
+	void DrawNotifications();
 	// Presents the live map (rendered by MapDrawer into its offscreen surface)
 	// as an ImGui::Image inside the current window, aspect-fitted within the
 	// given available space, and records the drawn rect as the map viewport so

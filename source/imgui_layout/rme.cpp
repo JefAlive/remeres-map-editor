@@ -3,6 +3,7 @@
 
 #include "rme.h"
 #include "rme_widget.h"
+#include "gui.h"
 
 Rme g_rme;
 
@@ -213,19 +214,19 @@ void Rme::Draw(wxWindow* canvas)
                     /// @end Text
 
                     /// @begin Button
-                    ImGui::Button("Single Select", { 0, 0 });
+                    RmeLayout::SelectionModeButton("Single Select");
                     vb0011.AddSize(1 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Rectangle Select", { 0, 0 });
+                    RmeLayout::BrushButton("Eraser", g_gui.eraser);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Eraser", { 0, 0 });
+                    RmeLayout::BrushButton("Border", g_gui.optional_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
@@ -238,25 +239,25 @@ void Rme::Draw(wxWindow* canvas)
                     /// @end Text
 
                     /// @begin Button
-                    ImGui::Button("PZ", { 0, 0 });
+                    RmeLayout::BrushButton("PZ", g_gui.pz_brush);
                     vb0011.AddSize(1 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("NoPvp", { 0, 0 });
+                    RmeLayout::BrushButton("NoPvp", g_gui.rook_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Pvp", { 0, 0 });
+                    RmeLayout::BrushButton("Pvp", g_gui.pvp_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("BlockLogout", { 0, 0 });
+                    RmeLayout::BrushButton("BlockLogout", g_gui.nolog_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
@@ -269,31 +270,25 @@ void Rme::Draw(wxWindow* canvas)
                     /// @end Text
 
                     /// @begin Button
-                    ImGui::Button("Normal", { 0, 0 });
+                    RmeLayout::BrushButton("Normal##Door", g_gui.normal_door_brush);
                     vb0011.AddSize(1 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Closed", { 0, 0 });
+                    RmeLayout::BrushButton("Quest", g_gui.quest_door_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Quest", { 0, 0 });
+                    RmeLayout::BrushButton("Locked", g_gui.locked_door_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Locked", { 0, 0 });
-                    vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
-                    /// @end Button
-
-                    /// @begin Button
-                    ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Magic", { 0, 0 });
+                    RmeLayout::BrushButton("Magic", g_gui.magic_door_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
@@ -306,13 +301,13 @@ void Rme::Draw(wxWindow* canvas)
                     /// @end Text
 
                     /// @begin Button
-                    ImGui::Button("Normal", { 0, 0 });
+                    RmeLayout::BrushButton("Normal##Window", g_gui.window_door_brush);
                     vb0011.AddSize(1 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::ItemSize);
                     /// @end Button
 
                     /// @begin Button
                     ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
-                    ImGui::Button("Hatched", { 0, 0 });
+                    RmeLayout::BrushButton("Hatched", g_gui.hatch_door_brush);
                     vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
                     /// @end Button
 
@@ -366,6 +361,25 @@ void Rme::Draw(wxWindow* canvas)
                     hb00125.AddSize(0 * ImGui::GetStyle().ItemSpacing.x, ImRad::HBox::Stretch(1.0f));
                     ImGui::PopStyleVar();
                     /// @end Slider
+
+                    /// @begin Text
+                    ImRad::Spacing(1);
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                    ImGui::TextUnformatted("Brush Type");
+                    vb0011.AddSize(2 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::ItemSize);
+                    ImGui::PopStyleColor();
+                    /// @end Text
+
+                    /// @begin Button
+                    RmeLayout::BrushShapeButton("Circle", BRUSHSHAPE_CIRCLE);
+                    vb0011.AddSize(1 * ImGui::GetStyle().ItemSpacing.y, ImRad::VBox::ItemSize);
+                    /// @end Button
+
+                    /// @begin Button
+                    ImGui::SameLine(0, 1 * ImGui::GetStyle().ItemSpacing.x);
+                    RmeLayout::BrushShapeButton("Square", BRUSHSHAPE_SQUARE);
+                    vb0011.UpdateSize(0, ImRad::VBox::ItemSize);
+                    /// @end Button
 
                     /// @separator
                 }
@@ -767,23 +781,7 @@ void Rme::Draw(wxWindow* canvas)
 
                     /// @begin Child
                     ImGui::SetCursorScreenPos({ ImRad::GetParentInnerRect().GetCenter().x-240, ImRad::GetParentInnerRect().Min.y+20 }); //overlayPos=AlignHCenter|AlignTop,-240,20
-                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 170, 15 });
-                    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0);
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
-                    if (ImGui::BeginChild("child21", { 480, 48 }, ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMouseInputs))
-                    {
-                        /// @separator
-
-                        /// @begin Text
-                        ImGui::TextUnformatted("Popup de notifica\xc3\xa7\xc3\xb5" "es");
-                        /// @end Text
-
-                        /// @separator
-                    }
-                    ImGui::EndChild();
-                    ImGui::PopStyleColor();
-                    ImGui::PopStyleVar();
-                    ImGui::PopStyleVar();
+                    RmeLayout::DrawNotifications();
                     /// @end Child
 
                     /// @separator

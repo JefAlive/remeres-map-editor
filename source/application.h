@@ -112,7 +112,6 @@ public:
 protected:
 	MainMenuBar* menu_bar;
 	MainToolBar* tool_bar;
-	wxInfoBar* info_bar; ///< Non-modal inline warning bar (below toolbars)
 
 	friend class Application;
 	friend class GUI;

@@ -22,6 +22,7 @@
 #include "application.h"
 #include "client_assets.h"
 #include "main_menubar.h"
+#include "imgui_layout/rme_widget.h"
 
 #include "editor.h"
 #include "brush.h"
@@ -1451,6 +1452,13 @@ void GUI::SetStatusText(wxString text, int index) {
 		return;
 	}
 	status_fields[index] = text;
+
+	if (index == 0 && !text.IsEmpty()) {
+		// Field 0 carries transient notifications ("Copied N tiles",
+		// "Automagic enabled", ...); mirror them into the ImGui toaster.
+		// Higher fields are continuous readouts (brush, position, size).
+		RmeLayout::Notify(std::string(text.ToUTF8().data()));
+	}
 
 	// The status bar is drawn as an overlay inside the map canvas, so the
 	// canvas has to repaint for the new text to become visible.

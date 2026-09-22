@@ -27,6 +27,7 @@
 #include "minimap_window.h"
 #include "about_window.h"
 #include "main_menubar.h"
+#include "imgui_layout/rme_widget.h"
 #include "updater.h"
 #include "artprovider.h"
 #include "theme.h"
@@ -332,8 +333,7 @@ bool Application::ParseCommandLineMap(wxString &fileName) {
 }
 
 MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &size) :
-	wxFrame((wxFrame*)nullptr, -1, title, pos, size, wxDEFAULT_FRAME_STYLE),
-	info_bar(nullptr) {
+	wxFrame((wxFrame*)nullptr, -1, title, pos, size, wxDEFAULT_FRAME_STYLE) {
 	// Receive idle events
 	SetExtraStyle(wxWS_EX_PROCESS_IDLE);
 
@@ -363,11 +363,9 @@ MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &si
 
 	tool_bar = newd MainToolBar(this, g_gui.aui_manager);
 
-	// Create the inline info bar for non-fatal load warnings.
-	// It is parented to the frame but managed through the center AUI pane
-	// via a vertical sizer so it sits between the toolbars and the tabbook.
+	// The center pane hosts the tabbook directly. (The legacy wxInfoBar that
+	// used to sit here was retired: warnings now go to the ImGui toaster.)
 	wxPanel* centerPanel = newd wxPanel(this, wxID_ANY);
-	info_bar = newd wxInfoBar(centerPanel);
 
 	// Reparent the tabbook into the panel BEFORE adding it to the sizer:
 	// wxSizer::SetContainingWindow() asserts that every window it manages has
@@ -375,7 +373,6 @@ MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &si
 	g_gui.tabbook->Reparent(centerPanel);
 
 	wxBoxSizer* centerSizer = newd wxBoxSizer(wxVERTICAL);
-	centerSizer->Add(info_bar, wxSizerFlags(0).Expand());
 	centerSizer->Add(g_gui.tabbook, wxSizerFlags(1).Expand());
 	centerPanel->SetSizer(centerSizer);
 
@@ -388,7 +385,7 @@ MainFrame::MainFrame(const wxString &title, const wxPoint &pos, const wxSize &si
 MainFrame::~MainFrame() = default;
 
 void MainFrame::ShowInfoWarnings(const wxArrayString &warnings) {
-	if (warnings.empty() || !info_bar) {
+	if (warnings.empty()) {
 		return;
 	}
 
@@ -411,7 +408,8 @@ void MainFrame::ShowInfoWarnings(const wxArrayString &warnings) {
 		}
 	}
 
-	info_bar->ShowMessage(summary, wxICON_WARNING);
+	// Routed to the ImGui toaster; the legacy wxInfoBar is retired.
+	RmeLayout::Notify(std::string(summary.ToUTF8().data()), RmeLayout::ToastLevel::Warning);
 }
 
 void MainFrame::OnIdle(wxIdleEvent &event) {

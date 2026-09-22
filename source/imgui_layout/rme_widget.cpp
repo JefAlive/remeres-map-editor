@@ -25,6 +25,9 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <mutex>
+#include <string>
+#include <vector>
 
 namespace {
 
@@ -39,6 +42,32 @@ bool s_overlay_active = true;
 // Armed by the canvas on right-button release over the live map viewport;
 // DrawLiveMap opens the native ImGui context menu from it on the next paint.
 bool s_map_context_requested = false;
+
+// Canvas of the frame currently being drawn (set in Begin). wx-world calls
+// MUST NOT run inside the ImGui frame (modal dialogs and synchronous
+// repaints re-enter NewFrame): widgets capture their action and defer it
+// with wxWindow::CallAfter on this canvas instead.
+wxWindow* s_frame_canvas = nullptr;
+
+// Transient notification toaster (replaces wxInfoBar + field-0 status
+// messages). Producers run on any thread (e.g. background sqlite build),
+// the queue is consumed on the main thread by DrawNotifications().
+struct Toast {
+	std::string text;
+	RmeLayout::ToastLevel level;
+	float lifetimeSecs;
+	std::chrono::steady_clock::time_point at;
+};
+std::mutex s_toast_mutex;
+std::vector<Toast> s_toasts;
+constexpr size_t kToastMax = 5;
+constexpr float kToastInfoSecs = 4.0f;
+constexpr float kToastWarningSecs = 8.0f;
+// Last drawn toast window rect: registered as a keepout while visible so
+// clicks over a toast never leak into the editor below.
+ImVec2 s_toast_pos;
+ImVec2 s_toast_size;
+bool s_toast_visible = false;
 
 // Live minimap texture, rebuilt lazily from the current editor's map for the
 // current floor. The rebuild is rate-limited so continuous editing costs
@@ -235,7 +264,20 @@ ImGuiKey mapKeyCode(int keyCode) {
 
 namespace RmeLayout {
 
-static void FireMenuCommand(MenuBar::ActionID id, bool check) {
+// wx-world calls (menu events, brush switches, dialogs, synchronous repaints)
+// MUST NOT run inside the ImGui frame: modals and Update() re-enter NewFrame.
+// Defer them to the wx event loop past the current paint; if no frame canvas
+// is known (never the case from Draw), run inline.
+template <typename Fn>
+static void DeferWx(Fn&& fn) {
+	if (wxWindow* canvas = s_frame_canvas) {
+		canvas->CallAfter(std::forward<Fn>(fn));
+	} else {
+		fn();
+	}
+}
+
+static void FireMenuCommandNow(MenuBar::ActionID id, bool check) {
 	if (!g_gui.root) {
 		return;
 	}
@@ -251,6 +293,10 @@ static void FireMenuCommand(MenuBar::ActionID id, bool check) {
 	}
 	wxCommandEvent evt(wxEVT_COMMAND_MENU_SELECTED, fullId);
 	g_gui.root->GetEventHandler()->ProcessEvent(evt);
+}
+
+static void FireMenuCommand(MenuBar::ActionID id, bool check) {
+	DeferWx([id, check]() { FireMenuCommandNow(id, check); });
 }
 
 void FireMenuToggle(int actionId) {
@@ -274,20 +320,22 @@ void FireMenuFloor(int floor) {
 	if (floor < rme::MapMinLayer || floor > rme::MapMaxLayer) {
 		return;
 	}
-	// Uncheck the whole radio group first (mirrors UpdateFloorMenu) instead
-	// of relying on automatic radio unchecking, so OnChangeFloor always finds
-	// exactly one checked entry.
-	if (g_gui.root) {
-		if (wxMenuBar* menu_bar = g_gui.root->GetMenuBar()) {
-			for (int i = rme::MapMinLayer; i <= rme::MapMaxLayer; ++i) {
-				const int id = static_cast<int>(MAIN_FRAME_MENU) + static_cast<int>(MenuBar::FLOOR_0 + i);
-				if (wxMenuItem* item = menu_bar->FindItem(id)) {
-					item->Check(false);
+	DeferWx([floor]() {
+		// Uncheck the whole radio group first (mirrors UpdateFloorMenu) instead
+		// of relying on automatic radio unchecking, so OnChangeFloor always finds
+		// exactly one checked entry.
+		if (g_gui.root) {
+			if (wxMenuBar* menu_bar = g_gui.root->GetMenuBar()) {
+				for (int i = rme::MapMinLayer; i <= rme::MapMaxLayer; ++i) {
+					const int id = static_cast<int>(MAIN_FRAME_MENU) + static_cast<int>(MenuBar::FLOOR_0 + i);
+					if (wxMenuItem* item = menu_bar->FindItem(id)) {
+						item->Check(false);
+					}
 				}
 			}
 		}
-	}
-	FireMenuCommand(static_cast<MenuBar::ActionID>(MenuBar::FLOOR_0 + floor), true);
+		FireMenuCommandNow(static_cast<MenuBar::ActionID>(MenuBar::FLOOR_0 + floor), true);
+	});
 }
 
 void FloorButton(const char* label, int floor) {
@@ -317,7 +365,92 @@ void FloorButton(const char* label, int floor) {
 	}
 }
 
+// Accent fill for the active tool button: same full-strength primary as a
+// selected tab, so it tracks the active Theme palette.
+static void PushAccentButton() {
+	const uint32_t accent = Theme::Rgb(Theme::TKN_Purple);
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(
+		((accent >> 16) & 0xFF) / 255.0f,
+		((accent >> 8) & 0xFF) / 255.0f,
+		(accent & 0xFF) / 255.0f,
+		1.0f));
+}
+
+void BrushButton(const char* label, Brush* brush) {
+	const bool has_editor = g_gui.IsEditorOpen();
+	// Exclusive highlight across selection/zones/doors/windows: selecting a
+	// brush enters drawing mode, so while selection mode is on no brush shows
+	// as active (and vice versa via SelectionModeButton).
+	const bool usable = has_editor && brush != nullptr;
+	const bool active = usable && !g_gui.IsSelectionMode() && g_gui.GetCurrentBrush() == brush;
+	if (!usable) {
+		ImGui::BeginDisabled();
+	}
+	if (active) {
+		PushAccentButton();
+	}
+	const bool pressed = ImGui::Button(label, { 0, 0 });
+	if (active) {
+		ImGui::PopStyleColor();
+	}
+	if (!usable) {
+		ImGui::EndDisabled();
+	}
+	if (pressed && usable) {
+		// Same re-entrancy rule as FireMenuCommand: selecting a brush flips
+		// choicebook pages, whose events end in RefreshView()->Update(), a
+		// synchronous repaint that must not run inside this ImGui frame.
+		Brush* target = brush;
+		DeferWx([target]() { g_gui.SelectBrush(target); });
+	}
+}
+
+void SelectionModeButton(const char* label) {
+	const bool has_editor = g_gui.IsEditorOpen();
+	const bool active = has_editor && g_gui.IsSelectionMode();
+	if (!has_editor) {
+		ImGui::BeginDisabled();
+	}
+	if (active) {
+		PushAccentButton();
+	}
+	const bool pressed = ImGui::Button(label, { 0, 0 });
+	if (active) {
+		ImGui::PopStyleColor();
+	}
+	if (!has_editor) {
+		ImGui::EndDisabled();
+	}
+	if (pressed && has_editor) {
+		DeferWx([]() { g_gui.SetSelectionMode(); });
+	}
+}
+
+void BrushShapeButton(const char* label, int shape) {
+	const auto brush_shape = static_cast<BrushShape>(shape);
+	const bool has_editor = g_gui.IsEditorOpen();
+	// Independent from tool selection: always marks the current shape.
+	const bool active = g_gui.GetBrushShape() == brush_shape;
+	if (!has_editor) {
+		ImGui::BeginDisabled();
+	}
+	if (active) {
+		PushAccentButton();
+	}
+	const bool pressed = ImGui::Button(label, { 0, 0 });
+	if (active) {
+		ImGui::PopStyleColor();
+	}
+	if (!has_editor) {
+		ImGui::EndDisabled();
+	}
+	if (pressed && has_editor) {
+		DeferWx([brush_shape]() { g_gui.SetBrushShape(brush_shape); });
+	}
+}
+
 bool Begin(wxWindow* canvas) {
+	s_frame_canvas = canvas;
 	if (!canvas || !ImGuiOverlay::ensureInitialized()) {
 		return false;
 	}
@@ -675,6 +808,101 @@ void DrawMapContextMenu(MapCanvas* canvas) {
 		}
 	}
 	ImGui::EndPopup();
+}
+
+void Notify(const std::string& text, ToastLevel level) {
+	if (text.empty()) {
+		return;
+	}
+	const std::lock_guard<std::mutex> lock(s_toast_mutex);
+	const float lifetime = (level == ToastLevel::Warning) ? kToastWarningSecs : kToastInfoSecs;
+	s_toasts.push_back({ text, level, lifetime, std::chrono::steady_clock::now() });
+	while (s_toasts.size() > kToastMax) {
+		s_toasts.erase(s_toasts.begin());
+	}
+}
+
+void DrawNotifications() {
+	// Keepout from the last drawn rect: clicks over a visible toast must not
+	// reach the editor below (same staleness class as the viewport rects).
+	if (s_toast_visible) {
+		addMapKeepout(s_toast_pos.x, s_toast_pos.y, s_toast_size.x, s_toast_size.y);
+	}
+
+	std::vector<Toast> toasts;
+	const auto now = std::chrono::steady_clock::now();
+	{
+		const std::lock_guard<std::mutex> lock(s_toast_mutex);
+		s_toasts.erase(
+			std::remove_if(s_toasts.begin(), s_toasts.end(), [&now](const Toast& toast) {
+				return std::chrono::duration<float>(now - toast.at).count() > toast.lifetimeSecs;
+			}),
+			s_toasts.end());
+		toasts = s_toasts;
+	}
+	if (toasts.empty()) {
+		s_toast_visible = false;
+		return;
+	}
+
+	// Anchor: the caller positions the cursor where the placeholder sat
+	// (top-center over the map). One auto-sized window per toast, newest
+	// first, so each severity gets its own background.
+	ImVec2 cursor = ImGui::GetCursorScreenPos();
+	ImVec2 union_min(FLT_MAX, FLT_MAX);
+	ImVec2 union_max(-FLT_MAX, -FLT_MAX);
+	int slot = 0;
+	for (auto it = toasts.rbegin(); it != toasts.rend(); ++it, ++slot) {
+		const uint32_t accent = Theme::Rgb(
+			it->level == ToastLevel::Warning ? Theme::TKN_Orange : Theme::TKN_Blue);
+		const uint32_t base = Theme::Rgb(Theme::TKN_Bg);
+		// Tinted background (accent pulled toward the surface for readability
+		// in light and dark palettes) with a full-strength accent border.
+		const ImVec4 bg(
+			(((accent >> 16) & 0xFF) * 3 + ((base >> 16) & 0xFF)) / 4.0f / 255.0f,
+			(((accent >> 8) & 0xFF) * 3 + ((base >> 8) & 0xFF)) / 4.0f / 255.0f,
+			((accent & 0xFF) * 3 + (base & 0xFF)) / 4.0f / 255.0f,
+			0.96f);
+		const ImVec4 border(
+			((accent >> 16) & 0xFF) / 255.0f,
+			((accent >> 8) & 0xFF) / 255.0f,
+			(accent & 0xFF) / 255.0f,
+			1.0f);
+		ImGui::SetNextWindowPos(cursor);
+		ImGui::SetNextWindowSize(ImVec2(480.0f, 0.0f));
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, bg);
+		ImGui::PushStyleColor(ImGuiCol_Border, border);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 10.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+		char name[32];
+		std::snprintf(name, sizeof(name), "##RmeToast%d", slot);
+		const bool open = ImGui::Begin(
+			name, nullptr,
+			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMouseInputs);
+		if (open) {
+			ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 452.0f);
+			ImGui::TextUnformatted(it->text.c_str());
+			ImGui::PopTextWrapPos();
+			const ImVec2 pos = ImGui::GetWindowPos();
+			const ImVec2 size = ImGui::GetWindowSize();
+			union_min.x = std::min(union_min.x, pos.x);
+			union_min.y = std::min(union_min.y, pos.y);
+			union_max.x = std::max(union_max.x, pos.x + size.x);
+			union_max.y = std::max(union_max.y, pos.y + size.y);
+			cursor.y = union_max.y + 8.0f;
+		}
+		ImGui::End();
+		ImGui::PopStyleVar(3);
+		ImGui::PopStyleColor(2);
+	}
+	if (union_max.x > union_min.x && union_max.y > union_min.y) {
+		s_toast_pos = union_min;
+		s_toast_size = ImVec2(union_max.x - union_min.x, union_max.y - union_min.y);
+		s_toast_visible = true;
+	} else {
+		s_toast_visible = false;
+	}
 }
 
 bool isMapPoint(int x, int y) {
