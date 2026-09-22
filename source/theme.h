@@ -20,17 +20,71 @@
 
 #include <wx/colour.h>
 
+#include <cstdint>
+
 class wxWindow;
 
-// Central dark theme for the editor, based on the opencode "Aura" palette.
+// Editor theme system, switched at runtime from View > Theme.
 //
-// The theme is applied in two steps:
+// Every surface/ink colour is stored as a per-palette token table (this file
+// only mirrors the accessor set). The Aura palette is the default dark theme
+// and the source of the CSS-like tokens used on both sides of the UI:
+//   - Theme::*() (wxColour) colours native windows, dialogs and palettes.
+//   - Theme::Rgb(Token) feeds the ImGui style so the overlay tracks the same
+//     palette without duplicating values.
+//
+// The theme is applied in steps:
 //   1. Theme::Initialize() requests the dark appearance from the platform so
 //      native widgets (menus, file pickers, message boxes) match the editor.
-//   2. Theme::Apply(window) recursively colours a window and all of its
+//   2. Theme::SetPalette(palette) switches the active palette and immediately
+//      re-colours the whole frame tree.
+//   3. Theme::Apply(window) recursively colours a window and all of its
 //      children. Call it after the main frame and its palettes are created,
 //      and for every dialog/palette that is shown later.
 namespace Theme {
+
+enum class Palette {
+	Aura,
+	SolarizedLight,
+	Everforest,
+	Carbonfox,
+	Synthwave84,
+	Tokyonight,
+};
+
+// Token names shared by the wx palette accessors and the ImGui style.
+enum Token {
+	TKN_Bg,
+	TKN_Deep,      // darkest wells (title bars / deeply nested panels)
+	TKN_Panel,     // lifted surfaces (panels, frames, headers)
+	TKN_Popup,     // floating surfaces (popups, inputs)
+	TKN_Border,
+	TKN_Muted,     // comments, tree lines, disabled text
+	TKN_Fg,        // ink
+	TKN_FgMuted,   // secondary ink
+	TKN_Blue,
+	TKN_Cyan,
+	TKN_Green,
+	TKN_Orange,
+	TKN_Purple,
+	TKN_Pink,
+	TKN_Red,
+	TKN_Yellow,
+	TKN_Count,
+};
+
+Palette CurrentPalette();
+
+// Switch the active palette and re-colour the window tree in place.
+// Pass apply=false to only switch the internal palette value without touching
+// the window tree -- safe while the frame/AUI manager is still being built
+// (e.g. restoring a persisted palette from the menu bar's LoadValues, before
+// the frame is fully realised). The real re-colour then happens when the app
+// calls Theme::Apply(root) at startup.
+void SetPalette(Palette palette, bool apply = true);
+
+// Raw #RRGGBB value (0xrrggbb) of a token in the active palette.
+uint32_t Rgb(Token token);
 
 // Backgrounds
 wxColour Bg();

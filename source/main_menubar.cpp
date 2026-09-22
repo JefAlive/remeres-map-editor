@@ -33,6 +33,8 @@
 #include "lua/lua_script_manager.h"
 #include "lua/lua_scripts_window.h"
 #include "gui.h"
+#include "gl_imgui_overlay.h"
+#include "theme.h"
 
 #include <wx/chartype.h>
 #include <wx/choicdlg.h>
@@ -769,6 +771,13 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(SCALE_FILTER_2XSAI, wxITEM_RADIO, OnChangeViewSettings);
 	MAKE_ACTION(SCALE_FILTER_XBR, wxITEM_RADIO, OnChangeViewSettings);
 
+	MAKE_ACTION(THEME_AURA, wxITEM_RADIO, OnChangeTheme);
+	MAKE_ACTION(THEME_SOLARIZED_LIGHT, wxITEM_RADIO, OnChangeTheme);
+	MAKE_ACTION(THEME_EVERFOREST, wxITEM_RADIO, OnChangeTheme);
+	MAKE_ACTION(THEME_CARBONFOX, wxITEM_RADIO, OnChangeTheme);
+	MAKE_ACTION(THEME_SYNTHWAVE84, wxITEM_RADIO, OnChangeTheme);
+	MAKE_ACTION(THEME_TOKYONIGHT, wxITEM_RADIO, OnChangeTheme);
+
 	MAKE_ACTION(WIN_MINIMAP, wxITEM_NORMAL, OnMinimapWindow);
 	MAKE_ACTION(WIN_ACTIONS_HISTORY, wxITEM_NORMAL, OnActionsHistoryWindow);
 	MAKE_ACTION(WIN_SQLITE_MATERIALS_INSPECTOR, wxITEM_NORMAL, OnSQLiteMaterialsInspector);
@@ -1117,6 +1126,33 @@ void MainMenuBar::LoadValues() {
 			break;
 		default:
 			CheckItem(SCALE_FILTER_RETRO, true);
+			break;
+	}
+
+	switch (g_settings.getInteger(Config::THEME)) {
+		case static_cast<int>(Theme::Palette::SolarizedLight):
+			CheckItem(THEME_SOLARIZED_LIGHT, true);
+			Theme::SetPalette(Theme::Palette::SolarizedLight, false);
+			break;
+		case static_cast<int>(Theme::Palette::Everforest):
+			CheckItem(THEME_EVERFOREST, true);
+			Theme::SetPalette(Theme::Palette::Everforest, false);
+			break;
+		case static_cast<int>(Theme::Palette::Carbonfox):
+			CheckItem(THEME_CARBONFOX, true);
+			Theme::SetPalette(Theme::Palette::Carbonfox, false);
+			break;
+		case static_cast<int>(Theme::Palette::Synthwave84):
+			CheckItem(THEME_SYNTHWAVE84, true);
+			Theme::SetPalette(Theme::Palette::Synthwave84, false);
+			break;
+		case static_cast<int>(Theme::Palette::Tokyonight):
+			CheckItem(THEME_TOKYONIGHT, true);
+			Theme::SetPalette(Theme::Palette::Tokyonight, false);
+			break;
+		default:
+			CheckItem(THEME_AURA, true);
+			Theme::SetPalette(Theme::Palette::Aura, false);
 			break;
 	}
 }
@@ -3059,6 +3095,43 @@ void MainMenuBar::OnChangeViewSettings(wxCommandEvent &event) {
 
 	g_gui.RefreshView();
 	g_gui.root->GetAuiToolBar()->UpdateIndicators();
+}
+
+void MainMenuBar::OnChangeTheme(wxCommandEvent &event) {
+	// The menu entries are a radio group, so exactly one palette is active.
+	Theme::Palette palette = Theme::CurrentPalette();
+	const int menuId = event.GetId();
+	const int menuBase = static_cast<int>(MAIN_FRAME_MENU);
+	switch (menuId - menuBase) {
+		case MenuBar::THEME_AURA:
+			palette = Theme::Palette::Aura;
+			break;
+		case MenuBar::THEME_SOLARIZED_LIGHT:
+			palette = Theme::Palette::SolarizedLight;
+			break;
+		case MenuBar::THEME_EVERFOREST:
+			palette = Theme::Palette::Everforest;
+			break;
+		case MenuBar::THEME_CARBONFOX:
+			palette = Theme::Palette::Carbonfox;
+			break;
+		case MenuBar::THEME_SYNTHWAVE84:
+			palette = Theme::Palette::Synthwave84;
+			break;
+		case MenuBar::THEME_TOKYONIGHT:
+			palette = Theme::Palette::Tokyonight;
+			break;
+		default:
+			return;
+	}
+
+	if (palette == Theme::CurrentPalette()) {
+		return;
+	}
+
+	g_settings.setInteger(Config::THEME, static_cast<int>(palette));
+	Theme::SetPalette(palette);
+	ImGuiOverlay::refreshTheme();
 }
 
 void MainMenuBar::OnChangeFloor(wxCommandEvent &event) {

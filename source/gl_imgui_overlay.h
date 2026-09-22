@@ -34,6 +34,11 @@ namespace ImGuiOverlay {
 	// with a current GL context, i.e. from inside a wxGLCanvas paint handler.
 	bool ensureInitialized();
 
+	// Re-applies the ImGui style from the current Theme palete. No-op before
+	// the context exists. Call after Theme::SetPalette() so the overlay tracks
+	// the same palette as the native side.
+	void refreshTheme();
+
 	// Releases the ImGui resources. Must be called with a current GL context.
 	void shutdown();
 

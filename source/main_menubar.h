@@ -134,6 +134,12 @@ namespace MenuBar {
 		SCALE_FILTER_RETRO,
 		SCALE_FILTER_2XSAI,
 		SCALE_FILTER_XBR,
+		THEME_AURA,
+		THEME_SOLARIZED_LIGHT,
+		THEME_EVERFOREST,
+		THEME_CARBONFOX,
+		THEME_SYNTHWAVE84,
+		THEME_TOKYONIGHT,
 		WIN_MINIMAP,
 		WIN_ACTIONS_HISTORY,
 		WIN_SQLITE_MATERIALS_INSPECTOR,
@@ -294,6 +300,7 @@ public:
 	void OnZoomOut(wxCommandEvent &event);
 	void OnZoomNormal(wxCommandEvent &event);
 	void OnChangeViewSettings(wxCommandEvent &event);
+	void OnChangeTheme(wxCommandEvent &event);
 
 	// Network menu
 	void OnStartLive(wxCommandEvent &event);

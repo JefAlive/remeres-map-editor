@@ -222,6 +222,7 @@ void Settings::IO(IOMode mode) {
 	Int(SHOW_PICKUPABLES, 0);
 	Int(SHOW_MOVEABLES, 0);
 	Int(SCALE_FILTER, 2);
+	Int(THEME, 0);
 	Int(SCENE_RENDER_FPS, 0);
 
 	section("Version");

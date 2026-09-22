@@ -19,6 +19,7 @@
 
 #include "gl_imgui_overlay.h"
 #include "canvas_overlay.h"
+#include "theme.h"
 
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -47,7 +48,7 @@ namespace {
 		style.FramePadding = ImVec2(8.0f, 3.0f);
 		style.ItemSpacing = ImVec2(8.0f, 4.0f);
 
-		const auto col = [](unsigned int hex, float a = 1.0f) {
+const auto col = [](uint32_t hex, float a = 1.0f) {
 			return ImVec4(
 				((hex >> 16) & 0xFF) / 255.0f,
 				((hex >> 8) & 0xFF) / 255.0f,
@@ -55,30 +56,30 @@ namespace {
 				a);
 		};
 
-		// Aura theme (opencode packages/ui/src/theme/themes/aura.json dark
-// palette plus the TUI accent tokens). Surfaces stay dark and neutral --
-// the purple primary is reserved for interactive labels: active tab,
-// checkbox, button hover/active, selection, caret, drag target.
-		const ImVec4 bg        = col(0x15141b); // neutral (window)
-		const ImVec4 deep      = col(0x101016); // wells / deep panels
-		const ImVec4 panel     = col(0x1c1c23); // lifted surfaces
-		const ImVec4 popup     = col(0x23232b); // floating surfaces
-		const ImVec4 neutral   = col(0x2d2d2d); // border / scrollbar
-		const ImVec4 muted     = col(0x6d6a7e); // comment / tree lines
-		const ImVec4 soft      = col(0x858298); // disabled text (less dim)
+		// The palette is centralized in Theme (View > Theme); the overlay only
+		// maps the tokens onto ImGui roles. Surfaces stay neutral -- the primary
+		// accent is reserved for interactive labels: active tab, checkbox, button
+		// hover/active, selection, caret, drag target.
+		const ImVec4 bg        = col(Theme::Rgb(Theme::TKN_Bg)); // neutral (window)
+		const ImVec4 deep      = col(Theme::Rgb(Theme::TKN_Deep)); // wells / deep panels
+		const ImVec4 panel     = col(Theme::Rgb(Theme::TKN_Panel)); // lifted surfaces
+		const ImVec4 popup     = col(Theme::Rgb(Theme::TKN_Popup)); // floating surfaces
+		const ImVec4 neutral   = col(Theme::Rgb(Theme::TKN_Border)); // border / scrollbar
+		const ImVec4 muted     = col(Theme::Rgb(Theme::TKN_Muted)); // comment / tree lines
+		const ImVec4 soft      = col(Theme::Rgb(Theme::TKN_FgMuted)); // disabled text (less dim)
 
-		const ImVec4 fg        = col(0xedecee); // ink
+		const ImVec4 fg        = col(Theme::Rgb(Theme::TKN_Fg)); // ink
 
-		const ImVec4 purple    = col(0xa277ff); // primary
-		const ImVec4 pink      = col(0xf694ff); // secondary
-		const ImVec4 blue      = col(0x82e2ff); // info
-		const ImVec4 cyanGreen = col(0x61ffca); // success
-		const ImVec4 amber     = col(0xffca85); // warning
-		const ImVec4 red       = col(0xff6767); // error
+		const ImVec4 purple    = col(Theme::Rgb(Theme::TKN_Purple)); // primary
+		const ImVec4 pink      = col(Theme::Rgb(Theme::TKN_Pink)); // secondary
+		const ImVec4 blue      = col(Theme::Rgb(Theme::TKN_Blue)); // info
+		const ImVec4 cyanGreen = col(Theme::Rgb(Theme::TKN_Cyan)); // success
+		const ImVec4 amber     = col(Theme::Rgb(Theme::TKN_Orange)); // warning
+		const ImVec4 red       = col(Theme::Rgb(Theme::TKN_Red)); // error
 
 		style.Colors[ImGuiCol_Text] = fg;
 		style.Colors[ImGuiCol_TextDisabled] = soft;
-		style.Colors[ImGuiCol_TextSelectedBg] = col(0xa277ff, 0.40f);
+		style.Colors[ImGuiCol_TextSelectedBg] = col(Theme::Rgb(Theme::TKN_Purple), 0.40f);
 		style.Colors[ImGuiCol_TextLink] = blue;
 
 		style.Colors[ImGuiCol_WindowBg] = bg;
@@ -89,26 +90,26 @@ namespace {
 		style.Colors[ImGuiCol_TitleBgCollapsed] = bg;
 		style.Colors[ImGuiCol_MenuBarBg] = deep;
 
-		style.Colors[ImGuiCol_Border] = col(0x2d2d2d, 0.80f);
+		style.Colors[ImGuiCol_Border] = col(Theme::Rgb(Theme::TKN_Border), 0.80f);
 		style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 
 		style.Colors[ImGuiCol_FrameBg] = panel;
-		style.Colors[ImGuiCol_FrameBgHovered] = col(0xa277ff, 0.30f);
-		style.Colors[ImGuiCol_FrameBgActive] = col(0xa277ff, 0.45f);
+		style.Colors[ImGuiCol_FrameBgHovered] = col(Theme::Rgb(Theme::TKN_Purple), 0.30f);
+		style.Colors[ImGuiCol_FrameBgActive] = col(Theme::Rgb(Theme::TKN_Purple), 0.45f);
 
 		style.Colors[ImGuiCol_CheckMark] = purple;
-		style.Colors[ImGuiCol_CheckboxSelectedBg] = col(0xa277ff, 0.40f);
+		style.Colors[ImGuiCol_CheckboxSelectedBg] = col(Theme::Rgb(Theme::TKN_Purple), 0.40f);
 		style.Colors[ImGuiCol_SliderGrab] = purple;
 		style.Colors[ImGuiCol_SliderGrabActive] = pink;
 		style.Colors[ImGuiCol_InputTextCursor] = purple;
 
 		style.Colors[ImGuiCol_Button] = panel;
-		style.Colors[ImGuiCol_ButtonHovered] = col(0xa277ff, 0.85f);
+		style.Colors[ImGuiCol_ButtonHovered] = col(Theme::Rgb(Theme::TKN_Purple), 0.85f);
 		style.Colors[ImGuiCol_ButtonActive] = purple;
 
-		style.Colors[ImGuiCol_Header] = col(0xa277ff, 0.45f);
-		style.Colors[ImGuiCol_HeaderHovered] = col(0xa277ff, 0.75f);
-		style.Colors[ImGuiCol_HeaderActive] = col(0xa277ff, 1.0f);
+		style.Colors[ImGuiCol_Header] = col(Theme::Rgb(Theme::TKN_Purple), 0.45f);
+		style.Colors[ImGuiCol_HeaderHovered] = col(Theme::Rgb(Theme::TKN_Purple), 0.75f);
+		style.Colors[ImGuiCol_HeaderActive] = col(Theme::Rgb(Theme::TKN_Purple), 1.0f);
 		style.Colors[ImGuiCol_Separator] = neutral;
 		style.Colors[ImGuiCol_SeparatorHovered] = amber;
 		style.Colors[ImGuiCol_SeparatorActive] = pink;
@@ -122,7 +123,7 @@ namespace {
 		style.Colors[ImGuiCol_ScrollbarGrabActive] = purple;
 
 		style.Colors[ImGuiCol_Tab] = deep;
-		style.Colors[ImGuiCol_TabHovered] = col(0xa277ff, 0.55f);
+		style.Colors[ImGuiCol_TabHovered] = col(Theme::Rgb(Theme::TKN_Purple), 0.55f);
 		style.Colors[ImGuiCol_TabSelected] = purple;
 		style.Colors[ImGuiCol_TabSelectedOverline] = pink;
 		style.Colors[ImGuiCol_TabDimmed] = deep;
@@ -137,15 +138,15 @@ namespace {
 
 		style.Colors[ImGuiCol_TableHeaderBg] = panel;
 		style.Colors[ImGuiCol_TableBorderStrong] = neutral;
-		style.Colors[ImGuiCol_TableBorderLight] = col(0x2d2d2d, 0.5f);
+		style.Colors[ImGuiCol_TableBorderLight] = col(Theme::Rgb(Theme::TKN_Border), 0.5f);
 		style.Colors[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-		style.Colors[ImGuiCol_TableRowBgAlt] = col(0x1c1c23, 0.5f);
+		style.Colors[ImGuiCol_TableRowBgAlt] = col(Theme::Rgb(Theme::TKN_Panel), 0.5f);
 
 		style.Colors[ImGuiCol_DragDropTarget] = purple;
-		style.Colors[ImGuiCol_DragDropTargetBg] = col(0xa277ff, 0.20f);
+		style.Colors[ImGuiCol_DragDropTargetBg] = col(Theme::Rgb(Theme::TKN_Purple), 0.20f);
 
 		style.Colors[ImGuiCol_NavCursor] = purple;
-		style.Colors[ImGuiCol_NavWindowingHighlight] = col(0xf694ff, 0.70f);
+		style.Colors[ImGuiCol_NavWindowingHighlight] = col(Theme::Rgb(Theme::TKN_Pink), 0.70f);
 		style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
 		style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.50f);
 
@@ -155,6 +156,13 @@ namespace {
 
 bool ImGuiOverlay::isInitialized() {
 	return overlay_initialized;
+}
+
+void ImGuiOverlay::refreshTheme() {
+	if (!overlay_initialized) {
+		return;
+	}
+	applyStyle();
 }
 
 bool ImGuiOverlay::ensureInitialized() {

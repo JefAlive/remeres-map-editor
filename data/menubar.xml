@@ -139,6 +139,14 @@
             <item name="$CRT Blend" action="SCALE_FILTER_2XSAI" help="Soft, analog-TV blending."/>
             <item name="Smooth $Edges" action="SCALE_FILTER_XBR" help="xBRZ 4x anti-aliasing."/>
         </menu>
+        <menu name="$Theme">
+            <item name="A$ura" action="THEME_AURA" help="Dark Aura palette (default)."/>
+            <item name="Solarized $Light" action="THEME_SOLARIZED_LIGHT" help="Solarized light palette, high contrast."/>
+            <item name="$Everforest" action="THEME_EVERFOREST" help="Everforest dark palette."/>
+            <item name="$Carbonfox" action="THEME_CARBONFOX" help="Carbonfox dark palette (nightfox family)."/>
+            <item name="S$ynthwave84" action="THEME_SYNTHWAVE84" help="Synthwave84 dark palette."/>
+            <item name="$Tokyonight" action="THEME_TOKYONIGHT" help="Tokyo Night dark palette."/>
+        </menu>
         <separator/>
         <item name="$Show shade" hotkey="Q" action="SHOW_SHADE" help="Shade lower floors."/>
         <item name="Show $all floors" hotkey="Ctrl+W" action="SHOW_ALL_FLOORS" help="If not checked other floors are hidden."/>
