@@ -86,21 +86,22 @@ void MapWindow::SetSize(int x, int y, bool center) {
 	range_y = y;
 
 	if (center) {
-		// Center the view: camera offset = content_center - view_center
+		// Center the content on the true viewport center. ScreenToMap maps
+		// canvas logical px to world via (x_cl - vpx) * contentScale * zoom
+		// inside the child viewport, so half the viewport spans (vpw/2)*cs*zoom
+		// world px - not the canvas-relative vpx + vpw/2 the old code used.
 		double zoom = g_gui.GetCurrentZoom();
-		double view_cx, view_cy;
 		int vpx, vpy, vpw, vph;
 		if (canvas->getMapViewport(&vpx, &vpy, &vpw, &vph)) {
-			view_cx = vpx + vpw / 2.0;
-			view_cy = vpy + vph / 2.0;
+			const double scale = canvas->GetContentScaleFactor();
+			scroll_x = x / 2 - int((vpw / 2.0) * scale * zoom);
+			scroll_y = y / 2 - int((vph / 2.0) * scale * zoom);
 		} else {
 			int windowSizeX, windowSizeY;
 			canvas->GetSize(&windowSizeX, &windowSizeY);
-			view_cx = windowSizeX / 2.0;
-			view_cy = windowSizeY / 2.0;
+			scroll_x = x / 2 - int((windowSizeX / 2.0) * zoom);
+			scroll_y = y / 2 - int((windowSizeY / 2.0) * zoom);
 		}
-		scroll_x = x / 2 - int(view_cx * zoom);
-		scroll_y = y / 2 - int(view_cy * zoom);
 	}
 	ClampScroll();
 }
@@ -110,8 +111,11 @@ void MapWindow::ClampScroll() {
 	int view_w, view_h;
 	int vpx, vpy, vpw, vph;
 	if (canvas->getMapViewport(&vpx, &vpy, &vpw, &vph)) {
-		view_w = int(vpw * zoom);
-		view_h = int(vph * zoom);
+		// Visible world px across the viewport = vpw * contentScale * zoom,
+		// matching GetViewBox's screensize and ScreenToMap's scaling.
+		const double scale = canvas->GetContentScaleFactor();
+		view_w = int(vpw * scale * zoom);
+		view_h = int(vph * scale * zoom);
 	} else {
 		int windowSizeX, windowSizeY;
 		canvas->GetSize(&windowSizeX, &windowSizeY);
@@ -194,19 +198,20 @@ void MapWindow::GoToPreviousCenterPosition() {
 void MapWindow::Scroll(int x, int y, bool center) {
 	if (center) {
 		double zoom = g_gui.GetCurrentZoom();
-		double view_cx, view_cy;
 		int vpx, vpy, vpw, vph;
 		if (canvas->getMapViewport(&vpx, &vpy, &vpw, &vph)) {
-			view_cx = vpx + vpw / 2.0;
-			view_cy = vpy + vph / 2.0;
+			// Center on the true viewport center: (vpw/2)*cs*zoom world px, in
+			// the same convention ScreenToMap/GetViewBox use, so click-to-center
+			// lands the clicked tile exactly at the viewport center.
+			const double scale = canvas->GetContentScaleFactor();
+			x -= int((vpw / 2.0) * scale * zoom);
+			y -= int((vph / 2.0) * scale * zoom);
 		} else {
 			int windowSizeX, windowSizeY;
 			canvas->GetSize(&windowSizeX, &windowSizeY);
-			view_cx = windowSizeX / 2.0;
-			view_cy = windowSizeY / 2.0;
+			x -= int((windowSizeX / 2.0) * zoom);
+			y -= int((windowSizeY / 2.0) * zoom);
 		}
-		x -= int(view_cx * zoom);
-		y -= int(view_cy * zoom);
 	}
 
 	scroll_x = x;

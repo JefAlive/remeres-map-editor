@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 
 namespace {
 
@@ -97,11 +98,11 @@ void buildMinimapTexture(Map& map, int floor) {
 
 	const int width = max_x - min_x + 1;
 	const int height = max_y - min_y + 1;
-	// Guard against absurd worlds: cap each axis at 4096 (16 MB RGBA) so the
-	// whole floor still fits in one texture; the requested size stays at
-	// 1 tile per texel whenever it fits, and 2x powers otherwise.
+	// Guard against absurd worlds: cap each axis at 2048 (16 MB RGBA) so the
+	// floor still fits in one texture; the requested size stays at 1 tile per
+	// texel whenever it fits, and 2x powers otherwise.
 	int tex_scale = 1;
-	while (width / tex_scale > 4096 || height / tex_scale > 4096) {
+	while (width / tex_scale > 2048 || height / tex_scale > 2048) {
 		tex_scale <<= 1;
 	}
 	const int tex_w = (width + tex_scale - 1) / tex_scale;
@@ -464,10 +465,43 @@ void DrawMinimap(float availWidth, float availHeight) {
 	// stays black. The camera always follows the map viewport center, so the
 	// minimap content slides under a centered viewport box as the map scrolls.
 	const float px_per_tile = 1.0f;
-	int center_x = 0, center_y = 0;
-	canvas->GetScreenCenter(&center_x, &center_y);
-	const ImVec2 image_off((widget_size.x - static_cast<float>(center_x - s_minimap_min_x) * px_per_tile) * 0.5f,
-		(widget_size.y - static_cast<float>(center_y - s_minimap_min_y) * px_per_tile) * 0.5f);
+
+	// Camera and viewport box share ONE float source (GetViewBox) so the box is
+	// centered on the camera by construction. GetScreenCenter only backs the
+	// transient states where the live viewport is unavailable (screenshot, first
+	// frame); the box is then skipped, mirroring the drawer's full-canvas render.
+	const float zoom = static_cast<float>(canvas->GetZoom());
+	const float scale = static_cast<float>(canvas->GetContentScaleFactor());
+	const float floor_offset =
+		s_minimap_floor > rme::MapGroundLayer
+		? 0.0f
+		: static_cast<float>(rme::MapGroundLayer - s_minimap_floor);
+	const float tile_size = static_cast<float>(rme::TileSize) / zoom;
+	int scroll_x = 0, scroll_y = 0, screensize_x = 0, screensize_y = 0;
+	int vpx = 0, vpy = 0, vpw = 0, vph = 0;
+	const bool viewport_ok = canvas->getMapViewport(&vpx, &vpy, &vpw, &vph) && vpw > 0 && vph > 0;
+	canvas->GetViewBox(&scroll_x, &scroll_y, &screensize_x, &screensize_y);
+
+	float cam_x = 0.0f, cam_y = 0.0f;
+	float box_x0 = 0.0f, box_y0 = 0.0f, box_x1 = 0.0f, box_y1 = 0.0f;
+	if (viewport_ok && screensize_x > 0 && screensize_y > 0) {
+		box_x0 = static_cast<float>(scroll_x) / rme::TileSize + floor_offset;
+		box_y0 = static_cast<float>(scroll_y) / rme::TileSize + floor_offset;
+		box_x1 = box_x0 + static_cast<float>(screensize_x) / tile_size;
+		box_y1 = box_y0 + static_cast<float>(screensize_y) / tile_size;
+		cam_x = (box_x0 + box_x1) * 0.5f;
+		cam_y = (box_y0 + box_y1) * 0.5f;
+	} else {
+		int center_x = 0, center_y = 0;
+		canvas->GetScreenCenter(&center_x, &center_y);
+		cam_x = static_cast<float>(center_x);
+		cam_y = static_cast<float>(center_y);
+	}
+	// The camera sits at the widget center: the texture must be offset so
+	// image_off + (cam - min) == widget_size/2. Any other pivot places the box
+	// off-center by half the cam-to-min distance on large maps.
+	const ImVec2 image_off(widget_size.x * 0.5f - (cam_x - static_cast<float>(s_minimap_min_x)) * px_per_tile,
+		widget_size.y * 0.5f - (cam_y - static_cast<float>(s_minimap_min_y)) * px_per_tile);
 
 	// Left-click recenters the map on the clicked tile (of the minimap floor).
 	if (clicked) {
@@ -489,35 +523,42 @@ void DrawMinimap(float availWidth, float availHeight) {
 	dl->AddRectFilled(widget_pos, ImVec2(widget_pos.x + widget_size.x, widget_pos.y + widget_size.y),
 		IM_COL32(0x00, 0x00, 0x00, 0xFF));
 
-	// Each texel covers tex_scale tiles, drawn 1 tile per screen pixel.
+	// The editor culls map drawing to the canvas rect; the minimap does the same:
+	// only the strip of the floor texture that falls inside the widget is
+	// rasterized (via a UV sub-rect), so a huge floor never draws as one giant
+	// quad and small floors are still shown whole, centered, on the black
+	// backdrop. Each texel covers tex_scale tiles, drawn 1 tile per screen px.
 	const float draw_scale = static_cast<float>(s_minimap_tex_scale);
-	const ImVec2 img_min(widget_pos.x + image_off.x, widget_pos.y + image_off.y);
-	const ImVec2 img_max(img_min.x + static_cast<float>(s_minimap_w) * draw_scale,
-		img_min.y + static_cast<float>(s_minimap_h) * draw_scale);
-	// North is stored at texture row 0, which ImGui already puts at the top.
-	dl->AddImage((ImTextureID)(intptr_t)s_minimap_tex, img_min, img_max, { 0, 0 }, { 1, 1 });
+	const float img_w = static_cast<float>(s_minimap_w) * draw_scale;
+	const float img_h = static_cast<float>(s_minimap_h) * draw_scale;
+	const float vis_x0 = std::max(0.0f, image_off.x);
+	const float vis_y0 = std::max(0.0f, image_off.y);
+	const float vis_x1 = std::min(widget_size.x, image_off.x + img_w);
+	const float vis_y1 = std::min(widget_size.y, image_off.y + img_h);
+	if (vis_x1 > vis_x0 && vis_y1 > vis_y0) {
+		const float u0 = (vis_x0 - image_off.x) / draw_scale / static_cast<float>(s_minimap_w);
+		const float v0 = (vis_y0 - image_off.y) / draw_scale / static_cast<float>(s_minimap_h);
+		const float u1 = (vis_x1 - image_off.x) / draw_scale / static_cast<float>(s_minimap_w);
+		const float v1 = (vis_y1 - image_off.y) / draw_scale / static_cast<float>(s_minimap_h);
+		// North is stored at texture row 0, which ImGui already puts at the top.
+		dl->AddImage((ImTextureID)(intptr_t)s_minimap_tex,
+			ImVec2(widget_pos.x + vis_x0, widget_pos.y + vis_y0),
+			ImVec2(widget_pos.x + vis_x1, widget_pos.y + vis_y1),
+			{ u0, v0 }, { u1, v1 });
+	}
 
-	// Viewport rectangle: the world region currently visible in the map canvas,
-	// mapped with the same scroll/floor-offset math as the legacy minimap so
-	// underground floor storage lines up with the drawn tiles.
-	int scroll_x = 0, scroll_y = 0, screensize_x = 0, screensize_y = 0;
-	canvas->GetViewBox(&scroll_x, &scroll_y, &screensize_x, &screensize_y);
-	if (screensize_x > 0 && screensize_y > 0) {
-		const float floor_offset = s_minimap_floor > rme::MapGroundLayer
-			? 0.0f
-			: static_cast<float>(rme::MapGroundLayer - s_minimap_floor);
-		const float tile_size = static_cast<float>(rme::TileSize) / canvas->GetZoom();
-		const float x0 = static_cast<float>(scroll_x) / rme::TileSize + floor_offset;
-		const float y0 = static_cast<float>(scroll_y) / rme::TileSize + floor_offset;
-		const float x1 = x0 + static_cast<float>(screensize_x) / tile_size + 1.0f;
-		const float y1 = y0 + static_cast<float>(screensize_y) / tile_size + 1.0f;
-		const float box_x0 = widget_pos.x + image_off.x + (x0 - s_minimap_min_x) * px_per_tile;
-		const float box_y0 = widget_pos.y + image_off.y + (y0 - s_minimap_min_y) * px_per_tile;
-		const float box_x1 = widget_pos.x + image_off.x + (x1 - s_minimap_min_x) * px_per_tile;
-		const float box_y1 = widget_pos.y + image_off.y + (y1 - s_minimap_min_y) * px_per_tile;
-		if (box_x1 > box_x0 && box_y1 > box_y0) {
-			dl->AddRectFilled(ImVec2(box_x0, box_y0), ImVec2(box_x1, box_y1), IM_COL32(0xFF, 0xFF, 0xFF, 24));
-			dl->AddRect(ImVec2(box_x0, box_y0), ImVec2(box_x1, box_y1), IM_COL32(0xFF, 0xFF, 0xFF, 230), 0.0f, 0, 1.0f);
+	// Viewport rectangle: exactly the tile span GetViewBox reports, in the same
+	// stored + floor-offset space as the texture, so underground floors line up
+	// with the drawn tiles. No legacy +1: the box covers precisely the region
+	// the drawer renders (it culls screensize/tile_size in SetupVars).
+	if (viewport_ok && box_x1 > box_x0 && box_y1 > box_y0) {
+		const float sx0 = widget_pos.x + image_off.x + (box_x0 - s_minimap_min_x) * px_per_tile;
+		const float sy0 = widget_pos.y + image_off.y + (box_y0 - s_minimap_min_y) * px_per_tile;
+		const float sx1 = widget_pos.x + image_off.x + (box_x1 - s_minimap_min_x) * px_per_tile;
+		const float sy1 = widget_pos.y + image_off.y + (box_y1 - s_minimap_min_y) * px_per_tile;
+		if (sx1 > sx0 && sy1 > sy0) {
+			dl->AddRectFilled(ImVec2(sx0, sy0), ImVec2(sx1, sy1), IM_COL32(0xFF, 0xFF, 0xFF, 24));
+			dl->AddRect(ImVec2(sx0, sy0), ImVec2(sx1, sy1), IM_COL32(0xFF, 0xFF, 0xFF, 230), 0.0f, 0, 1.0f);
 		}
 	}
 
@@ -529,6 +570,37 @@ void DrawMinimap(float availWidth, float availHeight) {
 	}
 	dl->AddRect(widget_pos, ImVec2(widget_pos.x + widget_size.x, widget_pos.y + widget_size.y),
 		IM_COL32(0xFF, 0xFF, 0xFF, 70), 0.0f, 0, 1.0f);
+
+	// DEBUG HUD: F12 toggles a live readout of scroll/viewport/camera/box so any
+	// centering mismatch can be pinned down at a glance.
+	static bool s_minimap_debug = false;
+	if (ImGui::IsKeyPressed(ImGuiKey_F12)) {
+		s_minimap_debug = !s_minimap_debug;
+	}
+	if (s_minimap_debug) {
+		int center_x = 0, center_y = 0;
+		canvas->GetScreenCenter(&center_x, &center_y);
+		char line[160];
+		const ImVec2 dbg(widget_pos.x + 4.0f, widget_pos.y + 4.0f);
+		const float line_h = ImGui::GetTextLineHeight();
+		const ImU32 col = IM_COL32(255, 230, 90, 255);
+		std::snprintf(line, sizeof(line), "vp %d,%d %dx%d ok=%d floor %d",
+			vpx, vpy, vpw, vph, viewport_ok ? 1 : 0, s_minimap_floor);
+		dl->AddText(ImVec2(dbg.x, dbg.y + 0.0f * line_h), col, line);
+		std::snprintf(line, sizeof(line), "scroll %d,%d ssize %d,%d zoom %.4g cs %.2f",
+			scroll_x, scroll_y, screensize_x, screensize_y, canvas->GetZoom(),
+			canvas->GetContentScaleFactor());
+		dl->AddText(ImVec2(dbg.x, dbg.y + 1.0f * line_h), col, line);
+		std::snprintf(line, sizeof(line), "cam %.2f,%.2f center %d,%d img %.1f,%.1f",
+			cam_x, cam_y, center_x, center_y, image_off.x, image_off.y);
+		dl->AddText(ImVec2(dbg.x, dbg.y + 2.0f * line_h), col, line);
+		std::snprintf(line, sizeof(line), "box %.2f,%.2f .. %.2f,%.2f", box_x0, box_y0, box_x1, box_y1);
+		dl->AddText(ImVec2(dbg.x, dbg.y + 3.0f * line_h), col, line);
+		std::snprintf(line, sizeof(line), "min %d,%d tex %dx%d scale %d tile %.2f",
+			s_minimap_min_x, s_minimap_min_y, s_minimap_w, s_minimap_h, s_minimap_tex_scale, tile_size);
+		dl->AddText(ImVec2(dbg.x, dbg.y + 4.0f * line_h), col, line);
+	}
+
 	dl->PopClipRect();
 }
 
