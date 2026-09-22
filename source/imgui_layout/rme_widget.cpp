@@ -11,6 +11,7 @@
 
 #include "editor.h"
 #include "gui.h"
+#include "gui_ids.h"
 #include "map.h"
 #include "map_display.h"
 #include "map_drawer.h"
@@ -31,6 +32,10 @@ float s_mouse_y = -1.0e9f;
 
 // The Rme layout replaces the legacy status footer and overlay scrollbars.
 bool s_overlay_active = true;
+
+// Armed by the canvas on right-button release over the live map viewport;
+// DrawLiveMap opens the native ImGui context menu from it on the next paint.
+bool s_map_context_requested = false;
 
 // Live minimap texture, rebuilt lazily from the current editor's map for the
 // current floor. The rebuild is rate-limited so continuous editing costs
@@ -364,12 +369,12 @@ void addMapKeepout(float x, float y, float w, float h) {
 void DrawLiveMap(wxWindow* canvas, float availWidth, float availHeight) {
 	const ImVec2 pos = ImGui::GetCursorScreenPos();
 
+	MapCanvas* map_canvas = dynamic_cast<MapCanvas*>(canvas);
 	GLuint tex = 0;
 	int texW = 0;
 	int texH = 0;
-	if (canvas) {
-		MapCanvas* map_canvas = dynamic_cast<MapCanvas*>(canvas);
-		MapDrawer* drawer = map_canvas ? map_canvas->GetDrawer() : nullptr;
+	if (map_canvas) {
+		MapDrawer* drawer = map_canvas->GetDrawer();
 		if (drawer) {
 			tex = drawer->getMapSurfaceTexture();
 			texW = drawer->getMapSurfaceWidth();
@@ -382,6 +387,7 @@ void DrawLiveMap(wxWindow* canvas, float availWidth, float availHeight) {
 		// space and record the rect so the camera and input stay consistent.
 		ImGui::Dummy({ availWidth, availHeight });
 		setMapViewport(pos.x, pos.y, availWidth, availHeight);
+		DrawMapContextMenu(map_canvas);
 		return;
 	}
 
@@ -398,6 +404,7 @@ void DrawLiveMap(wxWindow* canvas, float availWidth, float availHeight) {
 	k = std::min(k, 1.0f);
 	if (k <= 0.0f) {
 		setMapViewport(pos.x, pos.y, availWidth, availHeight);
+		DrawMapContextMenu(map_canvas);
 		return;
 	}
 	const float drawW = natW * k;
@@ -416,6 +423,160 @@ void DrawLiveMap(wxWindow* canvas, float availWidth, float availHeight) {
 	// bottom-right, so V must be inverted to keep north pointing up.
 	ImGui::Image((ImTextureID)(intptr_t)tex, { drawW, drawH }, { 0, 1 }, { 1, 0 });
 	setMapViewport(pos.x, pos.y, availWidth, availHeight);
+	DrawMapContextMenu(map_canvas);
+}
+
+void openMapContextMenu() {
+	s_map_context_requested = true;
+}
+
+// Splits a wx menu label ("&Cut\tCTRL+X") into ImGui text + shortcut.
+static void SplitContextLabel(const std::string& label, std::string& text, std::string& shortcut) {
+	text.clear();
+	shortcut.clear();
+	bool in_shortcut = false;
+	for (char c : label) {
+		if (c == '\t') {
+			in_shortcut = true;
+			continue;
+		}
+		if (c == '&' && !in_shortcut) {
+			continue;
+		}
+		(in_shortcut ? shortcut : text) += c;
+	}
+}
+
+// Dispatches a shared-model action id to the same MapCanvas handler the wx
+// menu invokes, so the ImGui popup keeps full feature parity by construction.
+// The handlers ignore the event payload (WXUNUSED).
+static void DispatchContextAction(MapCanvas* canvas, int actionId) {
+	wxCommandEvent dummy;
+	switch (actionId) {
+		case MAP_POPUP_MENU_CUT:
+			canvas->OnCut(dummy);
+			break;
+		case MAP_POPUP_MENU_COPY:
+			canvas->OnCopy(dummy);
+			break;
+		case MAP_POPUP_MENU_COPY_POSITION:
+			canvas->OnCopyPosition(dummy);
+			break;
+		case MAP_POPUP_MENU_PASTE:
+			canvas->OnPaste(dummy);
+			break;
+		case MAP_POPUP_MENU_DELETE:
+			canvas->OnDelete(dummy);
+			break;
+		case MAP_POPUP_MENU_COPY_ITEM_ID:
+			canvas->OnCopyItemId(dummy);
+			break;
+		case MAP_POPUP_MENU_COPY_NAME:
+			canvas->OnCopyName(dummy);
+			break;
+		case MAP_POPUP_MENU_ROTATE:
+			canvas->OnRotateItem(dummy);
+			break;
+		case MAP_POPUP_MENU_GOTO:
+			canvas->OnGotoDestination(dummy);
+			break;
+		case MAP_POPUP_MENU_COPY_DESTINATION:
+			canvas->OnCopyDestination(dummy);
+			break;
+		case MAP_POPUP_MENU_SWITCH_DOOR:
+			canvas->OnSwitchDoor(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_RAW_BRUSH:
+			canvas->OnSelectRAWBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_GROUND_BRUSH:
+			canvas->OnSelectGroundBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_DOODAD_BRUSH:
+			canvas->OnSelectDoodadBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_DOOR_BRUSH:
+			canvas->OnSelectDoorBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_WALL_BRUSH:
+			canvas->OnSelectWallBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_CARPET_BRUSH:
+			canvas->OnSelectCarpetBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_TABLE_BRUSH:
+			canvas->OnSelectTableBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_MONSTER_BRUSH:
+			canvas->OnSelectMonsterBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_SPAWN_BRUSH:
+			canvas->OnSelectSpawnBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_NPC_BRUSH:
+			canvas->OnSelectNpcBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_SPAWN_NPC_BRUSH:
+			canvas->OnSelectSpawnNpcBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_SELECT_HOUSE_BRUSH:
+			canvas->OnSelectHouseBrush(dummy);
+			break;
+		case MAP_POPUP_MENU_MOVE_TO_TILESET:
+			canvas->OnSelectMoveTo(dummy);
+			break;
+		case MAP_POPUP_MENU_PROPERTIES:
+			canvas->OnProperties(dummy);
+			break;
+		case MAP_POPUP_MENU_BROWSE_TILE:
+			canvas->OnBrowseTile(dummy);
+			break;
+		default:
+			break;
+	}
+}
+
+void DrawMapContextMenu(MapCanvas* canvas) {
+	if (!canvas) {
+		s_map_context_requested = false;
+		return;
+	}
+	if (s_map_context_requested) {
+		s_map_context_requested = false;
+		// Deferred one paint (~16 ms) after the wx release event, so the
+		// cursor is still effectively at the click point.
+		ImGui::SetNextWindowPos(ImGui::GetIO().MousePos);
+		ImGui::OpenPopup("RmeMapContextMenu");
+	}
+	if (!ImGui::BeginPopup("RmeMapContextMenu")) {
+		return;
+	}
+	std::vector<MapContextItem> items;
+	canvas->CollectContextMenuItems(items);
+	for (const MapContextItem& item : items) {
+		if (item.separator) {
+			ImGui::Separator();
+			continue;
+		}
+		std::string text;
+		std::string shortcut;
+		SplitContextLabel(item.label, text, shortcut);
+		if (ImGui::MenuItem(text.c_str(), shortcut.empty() ? nullptr : shortcut.c_str(), false, item.enabled)) {
+			// Deferred past the paint: some actions open modal wx dialogs
+			// (Properties, Browse Field, ...), whose nested event loop would
+			// repaint into this still-open ImGui frame (NewFrame re-entry).
+			// The wx popup is modal and only dispatches after it closes;
+			// CallAfter gives the ImGui path the same ordering.
+			const int actionId = item.actionId;
+			canvas->CallAfter([canvas, actionId]() {
+				DispatchContextAction(canvas, actionId);
+			});
+		}
+		if (!item.help.empty() && ImGui::IsItemHovered()) {
+			ImGui::SetTooltip("%s", item.help.c_str());
+		}
+	}
+	ImGui::EndPopup();
 }
 
 bool isMapPoint(int x, int y) {

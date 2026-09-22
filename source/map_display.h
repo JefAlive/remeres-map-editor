@@ -23,6 +23,9 @@
 #include "monster.h"
 #include "npc.h"
 
+#include <string>
+#include <vector>
+
 class Item;
 class Monster;
 class Npc;
@@ -30,6 +33,19 @@ class MapWindow;
 class MapPopupMenu;
 class RenderTimer;
 class MapDrawer;
+
+// Single-source model for the map right-click menu, shared by the legacy
+// wxMenu renderer (MapPopupMenu::Update) and the ImGui popup (Rme layout).
+// `label` keeps the exact wx text, with & mnemonics and a \t shortcut
+// suffix; the ImGui renderer strips/splits those. `actionId` is a
+// MAP_POPUP_MENU_* id from gui_ids.h (0 for separators).
+struct MapContextItem {
+	int actionId = 0;
+	std::string label;
+	std::string help;
+	bool enabled = true;
+	bool separator = false;
+};
 
 class MapCanvas : public wxGLCanvas {
 public:
@@ -98,6 +114,11 @@ public:
 	void OnSelectMoveTo(wxCommandEvent &event);
 	// ---
 	void OnProperties(wxCommandEvent &event);
+
+	// Shared right-click menu model (same items, conditions and callbacks as
+	// the wx popup, rendered natively by the ImGui layout). Implemented via
+	// MapPopupMenu::BuildItems on this canvas' editor.
+	void CollectContextMenuItems(std::vector<MapContextItem> &items);
 
 	virtual void Refresh();
 
@@ -242,6 +263,11 @@ public:
 	virtual ~MapPopupMenu();
 
 	void Update();
+
+	// Builds the item model Update() renders: same entries, order, labels and
+	// enable conditions, shared with the ImGui renderer so both popups stay
+	// in sync by construction.
+	static void BuildItems(Editor &editor, std::vector<MapContextItem> &items);
 
 protected:
 	Editor &editor;

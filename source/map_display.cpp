@@ -1876,8 +1876,15 @@ void MapCanvas::OnMousePropertiesRelease(wxMouseEvent &event) {
 		// Nothing
 	}
 
-	popup_menu->Update();
-	PopupMenu(popup_menu);
+	if (RmeLayout::isOverlayActive() && RmeLayout::isMapPoint(event.GetX(), event.GetY())) {
+		// The release landed on the ImGui-owned live map viewport: the Rme
+		// layout opens its native popup on the next paint instead of the
+		// legacy wx menu below.
+		RmeLayout::openMapContextMenu();
+	} else {
+		popup_menu->Update();
+		PopupMenu(popup_menu);
+	}
 
 	editor.resetActionsTimer();
 	dragging = false;
@@ -3047,6 +3054,31 @@ MapPopupMenu::MapPopupMenu(Editor &editor) :
 
 MapPopupMenu::~MapPopupMenu() {
 	////
+}
+
+void MapCanvas::CollectContextMenuItems(std::vector<MapContextItem> &items) {
+	MapPopupMenu::BuildItems(editor, items);
+}
+
+void MapPopupMenu::BuildItems(Editor &editor, std::vector<MapContextItem> &items) {
+	// Reuse Update() itself as the single source of entries, order, labels
+	// and enable conditions: build a throwaway menu and read the model back.
+	// Both the wx popup and the ImGui popup then render the same items.
+	items.clear();
+	MapPopupMenu menu(editor);
+	menu.Update();
+	for (wxMenuItem* menu_item : menu.GetMenuItems()) {
+		MapContextItem item;
+		if (menu_item->IsSeparator()) {
+			item.separator = true;
+		} else {
+			item.actionId = menu_item->GetId();
+			item.label = menu_item->GetItemLabel().ToStdString();
+			item.help = menu_item->GetHelp().ToStdString();
+			item.enabled = menu_item->IsEnabled();
+		}
+		items.push_back(item);
+	}
 }
 
 void MapPopupMenu::Update() {

@@ -2,6 +2,8 @@
 
 #include <wx/window.h>
 
+class MapCanvas;
+
 // Bridge between the wxWidgets MapCanvas and the ImRAD-generated editor layout
 // (Rme). The layout is an always-on overlay: every paint draws it on top of the
 // map, and wx mouse/keyboard events are forwarded into ImGui. When ImGui wants
@@ -62,6 +64,14 @@ namespace RmeLayout {
 	// Everything outside it in the map area is opaque.
 	void drawMapViewport(float width, float height);
 
+	// Native ImGui replacement for the map right-click menu (MapPopupMenu).
+	// The canvas arms it on right-button release over the live viewport via
+	// openMapContextMenu(); DrawMapContextMenu() opens and draws the popup on
+	// the next frame from DrawLiveMap, rendering the shared item model
+	// (MapCanvas::CollectContextMenuItems) and dispatching to the same
+	// MapCanvas::OnXxx callbacks as the wx menu.
+	void openMapContextMenu();
+	void DrawMapContextMenu(MapCanvas* canvas);
 	// Presents the live map (rendered by MapDrawer into its offscreen surface)
 	// as an ImGui::Image inside the current window, aspect-fitted within the
 	// given available space, and records the drawn rect as the map viewport so
