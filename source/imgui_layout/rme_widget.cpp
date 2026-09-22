@@ -31,14 +31,19 @@ float s_mouse_y = -1.0e9f;
 // The Rme layout replaces the legacy status footer and overlay scrollbars.
 bool s_overlay_active = true;
 
-// Live minimap texture, rebuilt lazily from the current editor's map. The
-	// rebuild is rate-limited so continuous editing costs nothing while unchanged.
-	GLuint s_minimap_tex = 0;
-	int s_minimap_w = 0;
-	int s_minimap_h = 0;
-	Map* s_minimap_map = nullptr;
-	bool s_minimap_valid = false;
-	std::chrono::steady_clock::time_point s_minimap_built_at = std::chrono::steady_clock::now();
+// Live minimap texture, rebuilt lazily from the current editor's map for the
+// current floor. The rebuild is rate-limited so continuous editing costs
+// nothing while unchanged; floor switches rebuild immediately.
+GLuint s_minimap_tex = 0;
+int s_minimap_w = 0;
+int s_minimap_h = 0;
+int s_minimap_min_x = 0;
+int s_minimap_min_y = 0;
+int s_minimap_tex_scale = 1;
+int s_minimap_floor = rme::MapGroundLayer;
+Map* s_minimap_map = nullptr;
+bool s_minimap_valid = false;
+std::chrono::steady_clock::time_point s_minimap_built_at = std::chrono::steady_clock::now();
 
 	// Screen-space rect of the transparent center (live map viewport) plus any
 	// interactive keepouts (floor buttons, ...) recorded while the layout draws.
@@ -66,7 +71,7 @@ bool s_overlay_active = true;
 		return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
 	}
 
-void buildMinimapTexture(Map& map) {
+void buildMinimapTexture(Map& map, int floor) {
 	int min_x = 0x10000, min_y = 0x10000;
 	int max_x = 0x00000, max_y = 0x00000;
 
@@ -76,7 +81,7 @@ void buildMinimapTexture(Map& map) {
 			continue;
 		}
 		const Position& pos = (*mit)->getPosition();
-		if (pos.z != rme::MapGroundLayer) {
+		if (pos.z != floor) {
 			continue;
 		}
 		min_x = std::min(min_x, pos.x);
@@ -87,28 +92,38 @@ void buildMinimapTexture(Map& map) {
 
 	s_minimap_valid = false;
 	if (max_x < min_x || max_y < min_y) {
-		return; // empty map
+		return; // empty floor
 	}
 
 	const int width = max_x - min_x + 1;
 	const int height = max_y - min_y + 1;
-	// Guard against absurd worlds: 4M pixels (16 MB RGBA) is the budget.
-	if (width <= 0 || height <= 0 || static_cast<int64_t>(width) * height > 4 * 1024 * 1024) {
-		return;
+	// Guard against absurd worlds: cap each axis at 4096 (16 MB RGBA) so the
+	// whole floor still fits in one texture; the requested size stays at
+	// 1 tile per texel whenever it fits, and 2x powers otherwise.
+	int tex_scale = 1;
+	while (width / tex_scale > 4096 || height / tex_scale > 4096) {
+		tex_scale <<= 1;
 	}
+	const int tex_w = (width + tex_scale - 1) / tex_scale;
+	const int tex_h = (height + tex_scale - 1) / tex_scale;
 
-	std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4, 0);
+	std::vector<uint8_t> rgba(static_cast<size_t>(tex_w) * tex_h * 4, 0);
 	for (MapIterator mit = map.begin(); mit != map.end(); ++mit) {
 		const Tile* tile = (*mit)->get();
 		if (!tile) {
 			continue;
 		}
 		const Position& pos = (*mit)->getPosition();
-		if (pos.z != rme::MapGroundLayer) {
+		if (pos.z != floor) {
+			continue;
+		}
+		const int px = (pos.x - min_x) / tex_scale;
+		const int py = (pos.y - min_y) / tex_scale;
+		if (px >= tex_w || py >= tex_h) {
 			continue;
 		}
 		const wxColor color = colorFromEightBit(tile->getMiniMapColor());
-		const size_t pixel = (static_cast<size_t>(pos.x - min_x) + static_cast<size_t>(pos.y - min_y) * width) * 4;
+		const size_t pixel = (static_cast<size_t>(px) + static_cast<size_t>(py) * tex_w) * 4;
 		rgba[pixel + 0] = static_cast<uint8_t>(color.Red());
 		rgba[pixel + 1] = static_cast<uint8_t>(color.Green());
 		rgba[pixel + 2] = static_cast<uint8_t>(color.Blue());
@@ -124,10 +139,14 @@ void buildMinimapTexture(Map& map) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
 
-	s_minimap_w = width;
-	s_minimap_h = height;
+	s_minimap_w = tex_w;
+	s_minimap_h = tex_h;
+	s_minimap_min_x = min_x;
+	s_minimap_min_y = min_y;
+	s_minimap_tex_scale = tex_scale;
+	s_minimap_floor = floor;
 	s_minimap_map = &map;
 	s_minimap_valid = true;
 }
@@ -139,12 +158,19 @@ void ensureMinimapTexture() {
 		return;
 	}
 	Map& map = editor->getMap();
+	MapTab* tab = g_gui.GetCurrentMapTab();
+	if (!tab || !tab->GetCanvas()) {
+		s_minimap_valid = false;
+		return;
+	}
+	const int floor = tab->GetCanvas()->GetFloor();
 
 	const bool source_changed = (s_minimap_map != &map);
+	const bool floor_changed = (s_minimap_floor != floor);
 	const auto now = std::chrono::steady_clock::now();
 	const bool throttled = (now - s_minimap_built_at) < std::chrono::milliseconds(800);
-	if (source_changed || (map.hasChanged() && !throttled)) {
-		buildMinimapTexture(map);
+	if (source_changed || floor_changed || (map.hasChanged() && !throttled)) {
+		buildMinimapTexture(map, floor);
 		s_minimap_built_at = now;
 	}
 }
@@ -406,29 +432,104 @@ bool isMapPoint(int x, int y) {
 void DrawMinimap(float availWidth, float availHeight) {
 	ensureMinimapTexture();
 
+	const ImVec2 widget_pos = ImGui::GetCursorScreenPos();
+	const ImVec2 widget_size(availWidth, availHeight);
+	if (widget_size.x < 8.0f || widget_size.y < 8.0f) {
+		return;
+	}
+
 	if (!s_minimap_valid || !s_minimap_tex) {
-		if (availWidth > 48.0f && availHeight > 24.0f) {
+		if (widget_size.x > 48.0f && widget_size.y > 24.0f) {
 			ImGui::TextUnformatted("No map");
 		}
 		return;
 	}
 
-	const float scale =
-		std::min(availWidth / static_cast<float>(s_minimap_w), availHeight / static_cast<float>(s_minimap_h));
-	if (scale <= 0.0f) {
+	// Reserve the interactive region up front so ImGui routes hover/click input
+	// here instead of the center map canvas. Left-click recenters the map.
+	ImGui::InvisibleButton("##rme_minimap", widget_size, ImGuiButtonFlags_MouseButtonLeft);
+	const bool hovered = ImGui::IsItemHovered();
+	const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+	const ImGuiIO& io = ImGui::GetIO();
+
+	const MapTab* tab = g_gui.GetCurrentMapTab();
+	MapCanvas* canvas = tab ? tab->GetCanvas() : nullptr;
+	if (!canvas) {
 		return;
 	}
-	const float draw_w = static_cast<float>(s_minimap_w) * scale;
-	const float draw_h = static_cast<float>(s_minimap_h) * scale;
-	const float pad_x = (availWidth - draw_w) * 0.5f;
-	const float pad_y = (availHeight - draw_h) * 0.5f;
-	if (pad_x > 0.0f) {
-		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad_x);
+
+	// The minimap is drawn at 1 tile per pixel on top of a black backdrop: the
+	// floor's bounding box only covers its useful area, so small floors (deep
+	// underground, sparsely built) never stretch to fill the widget - the rest
+	// stays black. The camera always follows the map viewport center, so the
+	// minimap content slides under a centered viewport box as the map scrolls.
+	const float px_per_tile = 1.0f;
+	int center_x = 0, center_y = 0;
+	canvas->GetScreenCenter(&center_x, &center_y);
+	const ImVec2 image_off((widget_size.x - static_cast<float>(center_x - s_minimap_min_x) * px_per_tile) * 0.5f,
+		(widget_size.y - static_cast<float>(center_y - s_minimap_min_y) * px_per_tile) * 0.5f);
+
+	// Left-click recenters the map on the clicked tile (of the minimap floor).
+	if (clicked) {
+		const float local_x = io.MousePos.x - widget_pos.x;
+		const float local_y = io.MousePos.y - widget_pos.y;
+		const int tile_x = s_minimap_min_x + static_cast<int>((local_x - image_off.x) / px_per_tile);
+		const int tile_y = s_minimap_min_y + static_cast<int>((local_y - image_off.y) / px_per_tile);
+		Editor* editor = g_gui.GetCurrentEditor();
+		if (editor) {
+			Map& map = editor->getMap();
+			const int mx = std::clamp(tile_x, 0, std::max(0, map.getWidth() - 1));
+			const int my = std::clamp(tile_y, 0, std::max(0, map.getHeight() - 1));
+			g_gui.SetScreenCenterPosition(Position(mx, my, s_minimap_floor), true);
+		}
 	}
-	if (pad_y > 0.0f) {
-		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + pad_y);
+
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	dl->PushClipRect(widget_pos, ImVec2(widget_pos.x + widget_size.x, widget_pos.y + widget_size.y), true);
+	dl->AddRectFilled(widget_pos, ImVec2(widget_pos.x + widget_size.x, widget_pos.y + widget_size.y),
+		IM_COL32(0x00, 0x00, 0x00, 0xFF));
+
+	// Each texel covers tex_scale tiles, drawn 1 tile per screen pixel.
+	const float draw_scale = static_cast<float>(s_minimap_tex_scale);
+	const ImVec2 img_min(widget_pos.x + image_off.x, widget_pos.y + image_off.y);
+	const ImVec2 img_max(img_min.x + static_cast<float>(s_minimap_w) * draw_scale,
+		img_min.y + static_cast<float>(s_minimap_h) * draw_scale);
+	// North is stored at texture row 0, which ImGui already puts at the top.
+	dl->AddImage((ImTextureID)(intptr_t)s_minimap_tex, img_min, img_max, { 0, 0 }, { 1, 1 });
+
+	// Viewport rectangle: the world region currently visible in the map canvas,
+	// mapped with the same scroll/floor-offset math as the legacy minimap so
+	// underground floor storage lines up with the drawn tiles.
+	int scroll_x = 0, scroll_y = 0, screensize_x = 0, screensize_y = 0;
+	canvas->GetViewBox(&scroll_x, &scroll_y, &screensize_x, &screensize_y);
+	if (screensize_x > 0 && screensize_y > 0) {
+		const float floor_offset = s_minimap_floor > rme::MapGroundLayer
+			? 0.0f
+			: static_cast<float>(rme::MapGroundLayer - s_minimap_floor);
+		const float tile_size = static_cast<float>(rme::TileSize) / canvas->GetZoom();
+		const float x0 = static_cast<float>(scroll_x) / rme::TileSize + floor_offset;
+		const float y0 = static_cast<float>(scroll_y) / rme::TileSize + floor_offset;
+		const float x1 = x0 + static_cast<float>(screensize_x) / tile_size + 1.0f;
+		const float y1 = y0 + static_cast<float>(screensize_y) / tile_size + 1.0f;
+		const float box_x0 = widget_pos.x + image_off.x + (x0 - s_minimap_min_x) * px_per_tile;
+		const float box_y0 = widget_pos.y + image_off.y + (y0 - s_minimap_min_y) * px_per_tile;
+		const float box_x1 = widget_pos.x + image_off.x + (x1 - s_minimap_min_x) * px_per_tile;
+		const float box_y1 = widget_pos.y + image_off.y + (y1 - s_minimap_min_y) * px_per_tile;
+		if (box_x1 > box_x0 && box_y1 > box_y0) {
+			dl->AddRectFilled(ImVec2(box_x0, box_y0), ImVec2(box_x1, box_y1), IM_COL32(0xFF, 0xFF, 0xFF, 24));
+			dl->AddRect(ImVec2(box_x0, box_y0), ImVec2(box_x1, box_y1), IM_COL32(0xFF, 0xFF, 0xFF, 230), 0.0f, 0, 1.0f);
+		}
 	}
-	ImGui::Image((ImTextureID)(intptr_t)s_minimap_tex, { draw_w, draw_h }, { 0, 0 }, { 1, 1 });
+
+	if (hovered) {
+		dl->AddLine({ io.MousePos.x, widget_pos.y },
+			{ io.MousePos.x, widget_pos.y + widget_size.y }, IM_COL32(0xFF, 0xFF, 0xFF, 60));
+		dl->AddLine({ widget_pos.x, io.MousePos.y },
+			{ widget_pos.x + widget_size.x, io.MousePos.y }, IM_COL32(0xFF, 0xFF, 0xFF, 60));
+	}
+	dl->AddRect(widget_pos, ImVec2(widget_pos.x + widget_size.x, widget_pos.y + widget_size.y),
+		IM_COL32(0xFF, 0xFF, 0xFF, 70), 0.0f, 0, 1.0f);
+	dl->PopClipRect();
 }
 
 bool isOverlayActive() {
